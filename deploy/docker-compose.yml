@@ -1,0 +1,36 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: streams-postgres
+    environment:
+      POSTGRES_USER: streams
+      POSTGRES_PASSWORD: streams_dev
+      POSTGRES_DB: streams_demo
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: streams-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  srs:
+    image: ossrs/srs:6
+    container_name: streams-srs
+    ports:
+      - "1935:1935"   # RTMP
+      - "8080:8080"   # HTTP API + HTTP-FLV
+      - "8000:8000"   # WebRTC
+    volumes:
+      - ./srs/srs.conf:/usr/local/srs/conf/srs.conf
+
+volumes:
+  pg_data:
+  redis_data:
