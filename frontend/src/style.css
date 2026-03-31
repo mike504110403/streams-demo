@@ -1,0 +1,103 @@
+:root {
+  --bg-primary: #121212;
+  --bg-secondary: #1e1e1e;
+  --bg-card: #2a2a2a;
+  --text-primary: #ffffff;
+  --text-secondary: #b3b3b3;
+  --text-muted: #666666;
+  --accent: #fe2c55;
+  --accent-light: #ff4d6a;
+  --border-color: #333333;
+  --input-bg: #2a2a2a;
+  --success: #25d366;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+#app {
+  width: 100%;
+  height: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  position: relative;
+}
+
+/* Vant 深色主題覆寫 */
+:root:root {
+  --van-background: var(--bg-primary);
+  --van-background-2: var(--bg-secondary);
+  --van-text-color: var(--text-primary);
+  --van-text-color-2: var(--text-secondary);
+  --van-text-color-3: var(--text-muted);
+  --van-border-color: var(--border-color);
+  --van-active-color: var(--bg-card);
+  --van-button-primary-background: var(--accent);
+  --van-button-primary-border-color: var(--accent);
+  --van-field-input-text-color: var(--text-primary);
+  --van-cell-background: var(--bg-secondary);
+  --van-nav-bar-background: var(--bg-primary);
+  --van-nav-bar-title-text-color: var(--text-primary);
+  --van-nav-bar-icon-color: var(--text-primary);
+  --van-tabbar-background: var(--bg-secondary);
+  --van-tabbar-item-active-color: var(--accent);
+  --van-tabbar-item-text-color: var(--text-muted);
+}
+
+/* 通用輸入框深色樣式 */
+.van-field {
+  background-color: var(--input-bg) !important;
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+.van-field__control {
+  color: var(--text-primary) !important;
+}
+
+.van-field__control::placeholder {
+  color: var(--text-muted) !important;
+}
+
+/* 主要按鈕樣式 */
+.btn-primary {
+  width: 100%;
+  height: 48px;
+  border-radius: 24px;
+  font-size: 16px;
+  font-weight: 600;
+  border: none;
+}
+
+/* 頁面容器 */
+.page-container {
+  min-height: 100vh;
+  padding: 0 20px;
+  background-color: var(--bg-primary);
+}
+
+/* 連結樣式 */
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+a:active {
+  opacity: 0.7;
+}
