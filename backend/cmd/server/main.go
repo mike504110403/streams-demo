@@ -67,6 +67,7 @@ func main() {
 	chatRepo := repository.NewChatRepository(dbPool)
 	wsHub := ws.NewHub()
 	wsHandler := handler.NewWSHandler(wsHub, authService, chatRepo)
+	chatHandler := handler.NewChatHandler(chatRepo, wsHub)
 
 	// 設定 Gin
 	r := gin.Default()
@@ -116,6 +117,13 @@ func main() {
 			streams.GET("/:id", streamHandler.GetStream)
 			streams.PUT("/:id", streamHandler.UpdateStream)
 			streams.DELETE("/:id", streamHandler.DeleteStream)
+			streams.GET("/:id/messages", chatHandler.GetMessages)
+		}
+
+		// 直播間公開 API（不需認證）
+		publicStreams := v1.Group("/streams")
+		{
+			publicStreams.GET("/:id/viewers", chatHandler.GetViewers)
 		}
 
 		// WebSocket 彈幕（token 在 query param 驗證）

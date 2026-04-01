@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -67,6 +68,50 @@ func (r *ChatRepository) GetRecentMessages(ctx context.Context, streamID uuid.UU
 	// 反轉順序（DB 查出來是 DESC，前端要 ASC）
 	for i, j := 0, len(messages)-1; i < j; i, j = i+1, j-1 {
 		messages[i], messages[j] = messages[j], messages[i]
+	}
+
+	return messages, rows.Err()
+}
+
+// GetMessagesByStreamID 取得指定直播間的歷史訊息（cursor 分頁）
+// before 為 zero time 時不加 cursor 條件，limit+1 用來判斷 has_more
+func (r *ChatRepository) GetMessagesByStreamID(ctx context.Context, streamID uuid.UUID, limit int, before time.Time) ([]ChatMessage, error) {
+	var rows pgx.Rows
+	var err error
+
+	if before.IsZero() {
+		rows, err = r.db.Query(ctx,
+			`SELECT cm.id, cm.stream_id, cm.user_id, cm.content, cm.type, u.nickname, u.avatar_url, cm.created_at
+			 FROM chat_messages cm
+			 JOIN users u ON u.id = cm.user_id
+			 WHERE cm.stream_id = $1
+			 ORDER BY cm.created_at DESC
+			 LIMIT $2`,
+			streamID, limit+1,
+		)
+	} else {
+		rows, err = r.db.Query(ctx,
+			`SELECT cm.id, cm.stream_id, cm.user_id, cm.content, cm.type, u.nickname, u.avatar_url, cm.created_at
+			 FROM chat_messages cm
+			 JOIN users u ON u.id = cm.user_id
+			 WHERE cm.stream_id = $1 AND cm.created_at < $2
+			 ORDER BY cm.created_at DESC
+			 LIMIT $3`,
+			streamID, before, limit+1,
+		)
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var messages []ChatMessage
+	for rows.Next() {
+		var m ChatMessage
+		if err := rows.Scan(&m.ID, &m.StreamID, &m.UserID, &m.Content, &m.Type, &m.Nickname, &m.AvatarURL, &m.CreatedAt); err != nil {
+			return nil, err
+		}
+		messages = append(messages, m)
 	}
 
 	return messages, rows.Err()
