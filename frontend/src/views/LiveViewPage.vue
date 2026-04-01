@@ -2,18 +2,29 @@
 import { onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useStreamStore } from '../stores/stream'
+import { useChatStore } from '../stores/chat'
+import DanmakuOverlay from '../components/danmaku/DanmakuOverlay.vue'
+import ChatMessageList from '../components/danmaku/ChatMessageList.vue'
+import ChatInput from '../components/danmaku/ChatInput.vue'
+import SystemNotice from '../components/danmaku/SystemNotice.vue'
 
 const route = useRoute()
 const router = useRouter()
 const streamStore = useStreamStore()
+const chatStore = useChatStore()
 
 onMounted(async () => {
   const id = route.params.id as string
   await streamStore.loadStreamById(id)
+
+  // 連線 Mock WebSocket，使用當前直播的觀看人數作為初始值
+  const initialCount = streamStore.currentStream?.viewer_count ?? 1234
+  chatStore.connect(initialCount)
 })
 
 onUnmounted(() => {
   streamStore.clearCurrentStream()
+  chatStore.disconnect()
 })
 
 function goBack() {
@@ -28,6 +39,10 @@ function formatViewerCount(count: number): string {
     return (count / 1000).toFixed(1) + 'k'
   }
   return String(count)
+}
+
+function handleSendMessage(content: string) {
+  chatStore.sendMessage(content)
 }
 </script>
 
@@ -44,7 +59,10 @@ function formatViewerCount(count: number): string {
       </div>
     </div>
 
-    <!-- 頂部浮層：返回按鈕 + 主播資訊 -->
+    <!-- 飄屏彈幕 -->
+    <DanmakuOverlay :messages="chatStore.messages" />
+
+    <!-- 頂部浮層：返回按鈕 + 主播資訊 + 即時觀看人數 -->
     <div class="overlay-top">
       <div class="back-btn" @click="goBack">
         <van-icon name="arrow-left" size="22" color="#fff" />
@@ -66,22 +84,23 @@ function formatViewerCount(count: number): string {
           <span class="host-name">{{ streamStore.currentStream.host_nickname }}</span>
           <span class="viewer-badge">
             <van-icon name="eye-o" size="12" />
-            {{ formatViewerCount(streamStore.currentStream.viewer_count) }} 觀看
+            {{ formatViewerCount(chatStore.connected ? chatStore.viewerCount : streamStore.currentStream.viewer_count) }} 觀看
           </span>
         </div>
       </div>
     </div>
 
-    <!-- 底部預留彈幕區域 -->
+    <!-- 底部浮層：系統通知 + 聊天列表 + 輸入框 -->
     <div class="overlay-bottom">
-      <div class="danmu-placeholder">
-        <span class="danmu-hint">彈幕功能開發中（Sprint 3）</span>
-      </div>
+      <!-- 系統通知（XX 進入直播間） -->
+      <SystemNotice :messages="chatStore.messages" />
+
+      <!-- 聊天訊息列表 -->
+      <ChatMessageList :messages="chatStore.messages" />
+
+      <!-- 底部操作列 -->
       <div class="bottom-actions">
-        <div class="input-mock">
-          <van-icon name="edit" size="16" color="#999" />
-          <span>說點什麼...</span>
-        </div>
+        <ChatInput @send="handleSendMessage" />
         <div class="action-icons">
           <van-icon name="like-o" size="24" color="#fff" />
           <van-icon name="share-o" size="24" color="#fff" />
@@ -138,6 +157,7 @@ function formatViewerCount(count: number): string {
   align-items: center;
   gap: 12px;
   background: linear-gradient(180deg, rgba(0, 0, 0, 0.6) 0%, transparent 100%);
+  z-index: 10;
 }
 
 .back-btn {
@@ -197,38 +217,14 @@ function formatViewerCount(count: number): string {
   padding: 16px;
   padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
   background: linear-gradient(0deg, rgba(0, 0, 0, 0.7) 0%, transparent 100%);
-}
-
-.danmu-placeholder {
-  min-height: 120px;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  padding-bottom: 12px;
-}
-
-.danmu-hint {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.3);
-  text-align: center;
+  z-index: 10;
 }
 
 .bottom-actions {
   display: flex;
   align-items: center;
   gap: 12px;
-}
-
-.input-mock {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
-  border-radius: 20px;
-  background-color: rgba(255, 255, 255, 0.12);
-  font-size: 14px;
-  color: #999;
+  margin-top: 8px;
 }
 
 .action-icons {
