@@ -26,10 +26,13 @@ services:
     container_name: streams-srs
     ports:
       - "1935:1935"   # RTMP
-      - "8080:8080"   # HTTP API + HTTP-FLV
+      - "1985:1985"   # SRS HTTP API
+      - "8080:8080"   # HTTP Server (HTTP-FLV + HLS)
       - "8000:8000"   # WebRTC
     volumes:
       - ./srs/srs.conf:/usr/local/srs/conf/srs.conf
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
 volumes:
   pg_data:
