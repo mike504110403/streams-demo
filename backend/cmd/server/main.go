@@ -56,8 +56,11 @@ func main() {
 	authService := service.NewAuthService(userRepo, rdb, cfg.JWTSecret)
 	authHandler := handler.NewAuthHandler(authService)
 	userHandler := handler.NewUserHandler(authService)
-	streamHandler := handler.NewStreamHandler()
-	srsHandler := handler.NewSRSHandler()
+
+	streamRepo := repository.NewStreamRepository(dbPool)
+	streamService := service.NewStreamService(streamRepo, rdb, cfg)
+	streamHandler := handler.NewStreamHandler(streamService)
+	srsHandler := handler.NewSRSHandler(streamService)
 
 	// 設定 Gin
 	r := gin.Default()
