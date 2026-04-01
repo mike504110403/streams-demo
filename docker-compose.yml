@@ -1,0 +1,51 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: streams-postgres
+    environment:
+      POSTGRES_USER: streams
+      POSTGRES_PASSWORD: streams_dev
+      POSTGRES_DB: streams_demo
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U streams -d streams_demo"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: streams-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  srs:
+    image: ossrs/srs:5
+    container_name: streams-srs
+    ports:
+      - "1935:1935"   # RTMP 收流
+      - "1985:1985"   # HTTP API
+      - "8080:8080"   # HTTP-FLV / HLS 播放
+    volumes:
+      - ./srs/conf/srs.conf:/usr/local/srs/conf/srs.conf
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
