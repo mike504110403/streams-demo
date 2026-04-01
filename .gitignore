@@ -1,4 +1,22 @@
+# 敏感資訊
 .env
+.env.local
+.env*.local
+
+# 編譯/建置產物
 backend/server
+frontend/dist/
+frontend/components.d.ts
+
+# 依賴
+frontend/node_modules/
+node_modules/
+
+# 快取
+frontend/.vite/
+frontend/.vite/deps_temp_*/
+
+# 工具
 md-viewer/
 .claude/worktrees/
+.DS_Store
