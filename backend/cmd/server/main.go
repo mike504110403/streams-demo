@@ -18,6 +18,7 @@ import (
 	"github.com/streams-demo/backend/internal/middleware"
 	"github.com/streams-demo/backend/internal/repository"
 	"github.com/streams-demo/backend/internal/service"
+	"github.com/streams-demo/backend/internal/ws"
 )
 
 func main() {
@@ -53,7 +54,7 @@ func main() {
 
 	// 初始化各層
 	userRepo := repository.NewUserRepository(dbPool)
-	authService := service.NewAuthService(userRepo, rdb, cfg.JWTSecret)
+	authService := service.NewAuthService(userRepo, rdb, cfg.JWTSecret, cfg.DebugMode)
 	authHandler := handler.NewAuthHandler(authService)
 	userHandler := handler.NewUserHandler(authService)
 
@@ -61,6 +62,11 @@ func main() {
 	streamService := service.NewStreamService(streamRepo, rdb, cfg)
 	streamHandler := handler.NewStreamHandler(streamService)
 	srsHandler := handler.NewSRSHandler(streamService)
+
+	// WebSocket 彈幕
+	chatRepo := repository.NewChatRepository(dbPool)
+	wsHub := ws.NewHub()
+	wsHandler := handler.NewWSHandler(wsHub, authService, chatRepo)
 
 	// 設定 Gin
 	r := gin.Default()
@@ -111,6 +117,9 @@ func main() {
 			streams.PUT("/:id", streamHandler.UpdateStream)
 			streams.DELETE("/:id", streamHandler.DeleteStream)
 		}
+
+		// WebSocket 彈幕（token 在 query param 驗證）
+		r.GET("/ws/chat/:stream_id", wsHandler.HandleChat)
 
 		// SRS Callback（內部使用，不走 JWT）
 		srs := v1.Group("/internal/srs")

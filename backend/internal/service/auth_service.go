@@ -40,14 +40,19 @@ type AuthService struct {
 	userRepo  *repository.UserRepository
 	rdb       *redis.Client
 	jwtSecret []byte
+	debugMode bool
 }
 
 // NewAuthService 建立 AuthService
-func NewAuthService(userRepo *repository.UserRepository, rdb *redis.Client, jwtSecret string) *AuthService {
+func NewAuthService(userRepo *repository.UserRepository, rdb *redis.Client, jwtSecret string, debugMode bool) *AuthService {
+	if debugMode {
+		log.Println("[DEBUG] AuthService: DEBUG_MODE 啟用，驗證碼將跳過比對")
+	}
 	return &AuthService{
 		userRepo:  userRepo,
 		rdb:       rdb,
 		jwtSecret: []byte(jwtSecret),
+		debugMode: debugMode,
 	}
 }
 
@@ -350,6 +355,12 @@ func (s *AuthService) UpdateProfile(ctx context.Context, id uuid.UUID, req model
 
 // verifyCode 驗證 SMS 驗證碼
 func (s *AuthService) verifyCode(ctx context.Context, phone, code string) error {
+	// DEBUG_MODE：跳過驗證碼比對，任意碼都能通過
+	if s.debugMode {
+		log.Printf("[DEBUG] verifyCode: DEBUG_MODE 啟用，跳過驗證碼比對 (phone=%s)", phone)
+		return nil
+	}
+
 	storedCode, expiresAt, used, err := s.userRepo.GetLatestVerificationCode(ctx, phone)
 	if err != nil {
 		return ErrInvalidCode
