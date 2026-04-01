@@ -26,13 +26,17 @@ function goToStream(id: string) {
   router.push(`/live/${id}`)
 }
 
+function goToLive() {
+  if (authStore.isAuthenticated) {
+    router.push('/go-live')
+  } else {
+    router.push('/login?redirect=/go-live')
+  }
+}
+
 function onTabChange(index: number) {
   if (index === 1) {
-    if (authStore.isAuthenticated) {
-      router.push('/go-live')
-    } else {
-      router.push('/login')
-    }
+    goToLive()
   } else if (index === 2) {
     if (authStore.isAuthenticated) {
       router.push('/profile')
@@ -166,6 +170,11 @@ function getStatusLabel(status: string): string {
           </div>
         </van-list>
       </van-pull-refresh>
+    </div>
+
+    <!-- 右下角浮動開播按鈕（登入用戶才看得到） -->
+    <div v-if="authStore.isAuthenticated" class="fab-go-live" @click="goToLive">
+      <van-icon name="plus" size="28" color="#fff" />
     </div>
 
     <!-- 底部 TabBar -->
@@ -331,6 +340,28 @@ function getStatusLabel(status: string): string {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* 浮動開播按鈕 */
+.fab-go-live {
+  position: fixed;
+  bottom: 80px;
+  right: 20px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--accent, #fe2c55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 14px rgba(254, 44, 85, 0.4);
+  cursor: pointer;
+  z-index: 20;
+  transition: transform 0.15s ease;
+}
+
+.fab-go-live:active {
+  transform: scale(0.92);
 }
 
 /* Vant 覆寫 */

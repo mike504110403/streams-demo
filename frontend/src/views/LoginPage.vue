@@ -17,6 +17,7 @@ const codeSent = ref(false)
 const countdown = ref(0)
 let countdownTimer: ReturnType<typeof setInterval> | null = null
 
+const DEBUG_MODE = import.meta.env.VITE_DEBUG_MODE !== 'false'
 const showApple = shouldShowAppleLogin()
 const showGoogle = shouldShowGoogleLogin()
 
@@ -69,7 +70,7 @@ async function handleLogin() {
     return
   }
 
-  if (code.value.length !== 6) {
+  if (!DEBUG_MODE && code.value.length !== 6) {
     showToast('請輸入 6 位數驗證碼')
     return
   }
@@ -154,6 +155,7 @@ function goRegister() {
     <div class="login-header">
       <h1 class="app-title">Streams</h1>
       <p class="app-subtitle">Live your moment</p>
+      <span v-if="DEBUG_MODE" class="debug-badge">DEBUG MODE — 驗證碼可隨意輸入</span>
     </div>
 
     <div class="login-form">
@@ -196,7 +198,7 @@ function goRegister() {
         class="btn-primary"
         :loading="loading"
         loading-text="登入中..."
-        :disabled="!codeSent"
+        :disabled="!DEBUG_MODE && !codeSent"
         @click="handleLogin"
       >
         登入
@@ -266,6 +268,17 @@ function goRegister() {
 .app-subtitle {
   font-size: 16px;
   color: var(--text-secondary);
+}
+
+.debug-badge {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  background-color: #ff9500;
 }
 
 .login-form {

@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { showToast } from 'vant'
 import { useStreamStore } from '../stores/stream'
 import { useChatStore } from '../stores/chat'
 import DanmakuOverlay from '../components/danmaku/DanmakuOverlay.vue'
@@ -43,6 +44,87 @@ function formatViewerCount(count: number): string {
 
 function handleSendMessage(content: string) {
   chatStore.sendMessage(content)
+}
+
+// ==================== 愛心動畫 ====================
+interface FloatingHeart {
+  id: number
+  color: string
+  left: number   // 隨機水平偏移 (px)
+  delay: number  // 隨機延遲 (ms)
+  size: number   // 隨機大小 (px)
+}
+
+const HEART_COLORS = ['#FF2D55', '#FF6B81', '#FF6348', '#A55EEA', '#FF69B4', '#FF4757', '#FFA502']
+let heartIdCounter = 0
+
+const floatingHearts = ref<FloatingHeart[]>([])
+const likeCount = ref(0)
+
+function handleLike() {
+  likeCount.value++
+
+  const heart: FloatingHeart = {
+    id: heartIdCounter++,
+    color: HEART_COLORS[Math.floor(Math.random() * HEART_COLORS.length)],
+    left: Math.random() * 40 - 20,   // -20px ~ +20px
+    delay: Math.random() * 100,       // 0 ~ 100ms
+    size: 24 + Math.random() * 14,    // 24 ~ 38px
+  }
+
+  floatingHearts.value.push(heart)
+
+  // 動畫結束後移除 DOM 節點
+  setTimeout(() => {
+    floatingHearts.value = floatingHearts.value.filter(h => h.id !== heart.id)
+  }, 1600)
+}
+
+// ==================== 分享面板 ====================
+const showShareSheet = ref(false)
+
+const shareActions = [
+  { name: '複製連結', icon: 'link-o' },
+  { name: '更多分享', icon: 'share-o' },
+]
+
+// 檢查 Web Share API 是否可用，不支援就只顯示複製連結
+const supportsWebShare = typeof navigator !== 'undefined' && !!navigator.share
+const filteredShareActions = supportsWebShare
+  ? shareActions
+  : shareActions.filter(a => a.name !== '更多分享')
+
+function handleShare() {
+  showShareSheet.value = true
+}
+
+async function onShareSelect(action: { name: string }) {
+  const shareUrl = window.location.href
+  const shareTitle = streamStore.currentStream?.title ?? '來看直播'
+
+  if (action.name === '複製連結') {
+    try {
+      await navigator.clipboard.writeText(shareUrl)
+      showToast('已複製連結')
+    } catch {
+      // fallback
+      const input = document.createElement('input')
+      input.value = shareUrl
+      document.body.appendChild(input)
+      input.select()
+      document.execCommand('copy')
+      document.body.removeChild(input)
+      showToast('已複製連結')
+    }
+  } else if (action.name === '更多分享') {
+    try {
+      await navigator.share({ title: shareTitle, url: shareUrl })
+    } catch {
+      // 使用者取消分享，不做任何事
+    }
+  }
+
+  showShareSheet.value = false
 }
 </script>
 
@@ -102,11 +184,36 @@ function handleSendMessage(content: string) {
       <div class="bottom-actions">
         <ChatInput @send="handleSendMessage" />
         <div class="action-icons">
-          <van-icon name="like-o" size="24" color="#fff" />
-          <van-icon name="share-o" size="24" color="#fff" />
+          <!-- 愛心按鈕 -->
+          <div class="like-btn-wrapper" @click="handleLike">
+            <van-icon name="like-o" size="24" color="#fff" />
+            <span v-if="likeCount > 0" class="like-count">{{ likeCount }}</span>
+            <!-- 飄浮愛心 -->
+            <div
+              v-for="heart in floatingHearts"
+              :key="heart.id"
+              class="floating-heart"
+              :style="{
+                color: heart.color,
+                left: heart.left + 'px',
+                fontSize: heart.size + 'px',
+                animationDelay: heart.delay + 'ms',
+              }"
+            >&#x2764;</div>
+          </div>
+          <!-- 分享按鈕 -->
+          <van-icon name="share-o" size="24" color="#fff" @click="handleShare" />
         </div>
       </div>
     </div>
+
+    <!-- 分享面板 -->
+    <van-action-sheet
+      v-model:show="showShareSheet"
+      :actions="filteredShareActions"
+      cancel-text="取消"
+      @select="onShareSelect"
+    />
   </div>
 </template>
 
@@ -231,5 +338,64 @@ function handleSendMessage(content: string) {
   display: flex;
   align-items: center;
   gap: 16px;
+}
+
+/* 愛心按鈕 */
+.like-btn-wrapper {
+  position: relative;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+}
+
+.like-btn-wrapper:active {
+  transform: scale(1.2);
+  transition: transform 0.1s;
+}
+
+.like-count {
+  position: absolute;
+  top: -10px;
+  right: -10px;
+  font-size: 10px;
+  color: #fff;
+  background-color: #FF2D55;
+  border-radius: 8px;
+  padding: 1px 5px;
+  min-width: 16px;
+  text-align: center;
+  line-height: 14px;
+}
+
+/* 飄浮愛心動畫 */
+.floating-heart {
+  position: absolute;
+  bottom: 20px;
+  pointer-events: none;
+  animation: heart-float 1.5s ease-out forwards;
+  opacity: 0;
+}
+
+@keyframes heart-float {
+  0% {
+    opacity: 1;
+    transform: translateY(0) scale(1) rotate(0deg);
+  }
+  25% {
+    opacity: 1;
+    transform: translateY(-40px) scale(1.1) rotate(-8deg);
+  }
+  50% {
+    opacity: 0.8;
+    transform: translateY(-90px) scale(1) rotate(6deg);
+  }
+  75% {
+    opacity: 0.4;
+    transform: translateY(-140px) scale(0.9) rotate(-4deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-200px) scale(0.7) rotate(8deg);
+  }
 }
 </style>

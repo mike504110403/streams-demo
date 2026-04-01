@@ -8,6 +8,10 @@ import type { AxiosInstance, InternalAxiosRequestConfig, AxiosResponse } from 'a
 import { mockStreams, type StreamItem } from './mockData'
 
 const MOCK_DELAY = 600
+const DEBUG_MODE = import.meta.env.VITE_DEBUG_MODE !== 'false'
+
+// 動態建立的直播間（POST /streams 建立後存入此處，供 GET /streams/:id 查詢）
+const createdStreams = new Map<string, StreamItem & Record<string, unknown>>()
 
 interface MockUser {
   id: string
@@ -86,13 +90,16 @@ const handlers: Array<{ method: string; pattern: RegExp; handler: Handler }> = [
       const body = JSON.parse(config.data || '{}')
       const { phone, code } = body
 
-      // 驗證碼檢查
-      const stored = mockDB.codes.get(phone)
-      if (!stored || stored.expiresAt < Date.now()) {
-        throw { response: mockResponse(400, { message: '驗證碼已過期，請重新發送' }) }
-      }
-      if (stored.code !== code) {
-        throw { response: mockResponse(400, { message: '驗證碼錯誤，請重新輸入' }) }
+      // DEBUG_MODE：跳過驗證碼比對
+      if (!DEBUG_MODE) {
+        const stored = mockDB.codes.get(phone)
+        if (!stored || stored.expiresAt < Date.now()) {
+          throw { response: mockResponse(400, { message: '驗證碼已過期，請重新發送' }) }
+        }
+        if (stored.code !== code) {
+          throw { response: mockResponse(400, { message: '驗證碼錯誤，請重新輸入' }) }
+        }
+        mockDB.codes.delete(phone)
       }
 
       // 查詢用戶
@@ -103,9 +110,6 @@ const handlers: Array<{ method: string; pattern: RegExp; handler: Handler }> = [
       if (!user) {
         throw { response: mockResponse(404, { message: '此手機號碼尚未註冊' }) }
       }
-
-      // 標記已使用
-      mockDB.codes.delete(phone)
 
       return mockResponse(200, {
         data: { ...generateTokens(), user },
@@ -121,13 +125,16 @@ const handlers: Array<{ method: string; pattern: RegExp; handler: Handler }> = [
       const body = JSON.parse(config.data || '{}')
       const { phone, code, nickname } = body
 
-      // 驗證碼檢查
-      const stored = mockDB.codes.get(phone)
-      if (!stored || stored.expiresAt < Date.now()) {
-        throw { response: mockResponse(400, { message: '驗證碼已過期，請重新發送' }) }
-      }
-      if (stored.code !== code) {
-        throw { response: mockResponse(400, { message: '驗證碼錯誤，請重新輸入' }) }
+      // DEBUG_MODE：跳過驗證碼比對
+      if (!DEBUG_MODE) {
+        const stored = mockDB.codes.get(phone)
+        if (!stored || stored.expiresAt < Date.now()) {
+          throw { response: mockResponse(400, { message: '驗證碼已過期，請重新發送' }) }
+        }
+        if (stored.code !== code) {
+          throw { response: mockResponse(400, { message: '驗證碼錯誤，請重新輸入' }) }
+        }
+        mockDB.codes.delete(phone)
       }
 
       // 檢查手機號碼是否已註冊
@@ -136,8 +143,6 @@ const handlers: Array<{ method: string; pattern: RegExp; handler: Handler }> = [
           throw { response: mockResponse(409, { message: '此手機號碼已被註冊' }) }
         }
       }
-
-      mockDB.codes.delete(phone)
 
       const user: MockUser = {
         id: generateId(),
@@ -328,15 +333,18 @@ const handlers: Array<{ method: string; pattern: RegExp; handler: Handler }> = [
         title: body.title || '未命名直播',
         cover_url: body.cover_url || null,
         stream_key: streamKey,
-        status: 'pending' as const,
+        status: 'live' as const,
         viewer_count: 0,
         host_nickname: user.nickname,
-        host_avatar: user.avatar_url,
+        host_avatar: user.avatar_url || '',
         created_at: new Date().toISOString(),
         rtmp_url: `rtmp://localhost:1935/live/${streamKey}`,
         flv_url: `http://localhost:8080/live/${streamKey}.flv`,
         hls_url: `http://localhost:8080/live/${streamKey}.m3u8`,
       }
+
+      // 存入動態直播間，讓 GET /streams/:id 能查到
+      createdStreams.set(streamId, newStream)
 
       return mockResponse(201, { data: newStream })
     },
@@ -350,6 +358,12 @@ const handlers: Array<{ method: string; pattern: RegExp; handler: Handler }> = [
       const url = config.url || ''
       const match = url.match(/\/streams\/([^/?]+)$/)
       const id = match ? match[1] : ''
+
+      // 先查動態建立的直播間，再查靜態 mock 資料
+      const dynamicStream = createdStreams.get(id)
+      if (dynamicStream) {
+        return mockResponse(200, { data: dynamicStream })
+      }
 
       const stream = mockStreams.find((s) => s.id === id)
       if (!stream) {

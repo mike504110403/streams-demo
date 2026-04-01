@@ -7,6 +7,7 @@ import { useAuthStore } from '../stores/auth'
 const router = useRouter()
 const authStore = useAuthStore()
 
+const DEBUG_MODE = import.meta.env.VITE_DEBUG_MODE !== 'false'
 const step = ref(1)
 const phone = ref('')
 const code = ref('')
@@ -63,7 +64,7 @@ function handleNextStep() {
     return
   }
 
-  if (code.value.length !== 6) {
+  if (!DEBUG_MODE && code.value.length !== 6) {
     showToast('請輸入 6 位數驗證碼')
     return
   }
@@ -114,6 +115,7 @@ function goLogin() {
     <div class="register-header">
       <h1 class="app-title">Streams</h1>
       <p class="app-subtitle">建立你的帳號</p>
+      <span v-if="DEBUG_MODE" class="debug-badge">DEBUG MODE — 驗證碼可隨意輸入</span>
     </div>
 
     <!-- 步驟指示 -->
@@ -225,6 +227,17 @@ function goLogin() {
 .app-subtitle {
   font-size: 16px;
   color: var(--text-secondary);
+}
+
+.debug-badge {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  background-color: #ff9500;
 }
 
 .steps {
