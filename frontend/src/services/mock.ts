@@ -5,6 +5,7 @@
  */
 
 import type { AxiosInstance, InternalAxiosRequestConfig, AxiosResponse } from 'axios'
+import { mockStreams, type StreamItem } from './mockData'
 
 const MOCK_DELAY = 600
 
@@ -276,6 +277,140 @@ const handlers: Array<{ method: string; pattern: RegExp; handler: Handler }> = [
 
       mockDB.users.set(user.id, user)
       return mockResponse(200, { data: user })
+    },
+  },
+  // ========== 直播相關 ==========
+  // GET /streams — 直播列表
+  {
+    method: 'get',
+    pattern: /\/streams(\?|$)/,
+    handler: async (config) => {
+      await delay(MOCK_DELAY)
+      const url = config.url || ''
+      const params = new URLSearchParams(url.split('?')[1] || '')
+      const page = parseInt(params.get('page') || '1', 10)
+      const limit = parseInt(params.get('limit') || '20', 10)
+
+      // 按 viewer_count DESC 排序
+      const sorted = [...mockStreams].sort((a, b) => b.viewer_count - a.viewer_count)
+      const start = (page - 1) * limit
+      const end = start + limit
+      const streams = sorted.slice(start, end)
+
+      return mockResponse(200, {
+        data: {
+          streams,
+          total: mockStreams.length,
+          page,
+          limit,
+        },
+      })
+    },
+  },
+  // POST /streams — 建立直播間
+  {
+    method: 'post',
+    pattern: /\/streams$/,
+    handler: async (config) => {
+      await delay(MOCK_DELAY)
+      const storedUser = localStorage.getItem('user')
+      if (!storedUser) {
+        throw { response: mockResponse(401, { message: 'Unauthorized' }) }
+      }
+      const user = JSON.parse(storedUser)
+      const body = JSON.parse(config.data || '{}')
+      const streamId = generateId()
+      const streamKey = 'sk_' + generateId()
+
+      const newStream = {
+        id: streamId,
+        user_id: user.id,
+        title: body.title || '未命名直播',
+        cover_url: body.cover_url || null,
+        stream_key: streamKey,
+        status: 'pending' as const,
+        viewer_count: 0,
+        host_nickname: user.nickname,
+        host_avatar: user.avatar_url,
+        created_at: new Date().toISOString(),
+        rtmp_url: `rtmp://localhost:1935/live/${streamKey}`,
+        flv_url: `http://localhost:8080/live/${streamKey}.flv`,
+        hls_url: `http://localhost:8080/live/${streamKey}.m3u8`,
+      }
+
+      return mockResponse(201, { data: newStream })
+    },
+  },
+  // GET /streams/:id — 直播詳情
+  {
+    method: 'get',
+    pattern: /\/streams\/([^/?]+)$/,
+    handler: async (config) => {
+      await delay(300)
+      const url = config.url || ''
+      const match = url.match(/\/streams\/([^/?]+)$/)
+      const id = match ? match[1] : ''
+
+      const stream = mockStreams.find((s) => s.id === id)
+      if (!stream) {
+        throw { response: mockResponse(404, { message: '直播間不存在' }) }
+      }
+
+      const streamKey = 'sk_mock_' + stream.id
+      return mockResponse(200, {
+        data: {
+          ...stream,
+          user_id: 'mock_user_' + stream.id,
+          created_at: new Date().toISOString(),
+          flv_url: `http://localhost:8080/live/${streamKey}.flv`,
+          hls_url: `http://localhost:8080/live/${streamKey}.m3u8`,
+        },
+      })
+    },
+  },
+  // PUT /streams/:id — 更新直播
+  {
+    method: 'put',
+    pattern: /\/streams\/([^/?]+)$/,
+    handler: async (config) => {
+      await delay(MOCK_DELAY)
+      const url = config.url || ''
+      const match = url.match(/\/streams\/([^/?]+)$/)
+      const id = match ? match[1] : ''
+      const body = JSON.parse(config.data || '{}')
+
+      const stream = mockStreams.find((s) => s.id === id)
+      if (!stream) {
+        throw { response: mockResponse(404, { message: '直播間不存在' }) }
+      }
+
+      const updated = {
+        ...stream,
+        title: body.title !== undefined ? body.title : stream.title,
+        cover_url: body.cover_url !== undefined ? body.cover_url : stream.cover_url,
+        user_id: 'mock_user_' + stream.id,
+        created_at: new Date().toISOString(),
+      }
+
+      return mockResponse(200, { data: updated })
+    },
+  },
+  // DELETE /streams/:id — 結束直播
+  {
+    method: 'delete',
+    pattern: /\/streams\/([^/?]+)$/,
+    handler: async (config) => {
+      await delay(MOCK_DELAY)
+      const url = config.url || ''
+      const match = url.match(/\/streams\/([^/?]+)$/)
+      const id = match ? match[1] : ''
+
+      const stream = mockStreams.find((s) => s.id === id)
+      if (!stream) {
+        throw { response: mockResponse(404, { message: '直播間不存在' }) }
+      }
+
+      return mockResponse(200, { data: { message: '直播已結束' } })
     },
   },
 ]

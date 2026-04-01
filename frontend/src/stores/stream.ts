@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { fetchMockStreams, fetchMockStreamById, type StreamItem } from '../services/mockData'
+import api from '../services/api'
+import type { StreamItem } from '../services/mockData'
 
 export const useStreamStore = defineStore('stream', () => {
   // === State ===
@@ -10,6 +11,8 @@ export const useStreamStore = defineStore('stream', () => {
   const hasMore = ref(true)
   const loading = ref(false)
   const refreshing = ref(false)
+
+  const PAGE_SIZE = 6
 
   // === Actions ===
 
@@ -21,9 +24,12 @@ export const useStreamStore = defineStore('stream', () => {
 
     loading.value = true
     try {
-      const result = await fetchMockStreams(page.value)
-      streams.value.push(...result.list)
-      hasMore.value = result.hasMore
+      const { data } = await api.get('/streams', {
+        params: { page: page.value, limit: PAGE_SIZE },
+      })
+      const result = data.data
+      streams.value.push(...result.streams)
+      hasMore.value = page.value * PAGE_SIZE < result.total
       page.value++
     } finally {
       loading.value = false
@@ -38,9 +44,12 @@ export const useStreamStore = defineStore('stream', () => {
     try {
       page.value = 1
       hasMore.value = true
-      const result = await fetchMockStreams(1)
-      streams.value = result.list
-      hasMore.value = result.hasMore
+      const { data } = await api.get('/streams', {
+        params: { page: 1, limit: PAGE_SIZE },
+      })
+      const result = data.data
+      streams.value = result.streams
+      hasMore.value = PAGE_SIZE < result.total
       page.value = 2
     } finally {
       refreshing.value = false
@@ -51,7 +60,8 @@ export const useStreamStore = defineStore('stream', () => {
    * 載入單一直播詳情
    */
   async function loadStreamById(id: string) {
-    currentStream.value = await fetchMockStreamById(id)
+    const { data } = await api.get(`/streams/${id}`)
+    currentStream.value = data.data
   }
 
   /**

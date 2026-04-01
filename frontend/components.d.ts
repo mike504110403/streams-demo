@@ -11,21 +11,12 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
+    ChatInput: typeof import('./src/components/danmaku/ChatInput.vue')['default']
+    ChatMessageList: typeof import('./src/components/danmaku/ChatMessageList.vue')['default']
+    DanmakuOverlay: typeof import('./src/components/danmaku/DanmakuOverlay.vue')['default']
     HelloWorld: typeof import('./src/components/HelloWorld.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
-    VanButton: typeof import('vant/es')['Button']
-    VanCell: typeof import('vant/es')['Cell']
-    VanCellGroup: typeof import('vant/es')['CellGroup']
-    VanEmpty: typeof import('vant/es')['Empty']
-    VanField: typeof import('vant/es')['Field']
-    VanIcon: typeof import('vant/es')['Icon']
-    VanImage: typeof import('vant/es')['Image']
-    VanList: typeof import('vant/es')['List']
-    VanLoading: typeof import('vant/es')['Loading']
-    VanNavBar: typeof import('vant/es')['NavBar']
-    VanPullRefresh: typeof import('vant/es')['PullRefresh']
-    VanTabbar: typeof import('vant/es')['Tabbar']
-    VanTabbarItem: typeof import('vant/es')['TabbarItem']
+    SystemNotice: typeof import('./src/components/danmaku/SystemNotice.vue')['default']
   }
 }

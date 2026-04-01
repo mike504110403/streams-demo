@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { showToast } from 'vant'
+import api from '../services/api'
 
 const router = useRouter()
 
@@ -12,7 +13,7 @@ function goBack() {
   router.back()
 }
 
-function handleStartLive() {
+async function handleStartLive() {
   if (!streamTitle.value.trim()) {
     showToast('請輸入直播標題')
     return
@@ -20,15 +21,24 @@ function handleStartLive() {
 
   isStarting.value = true
 
-  // 模擬開播（Sprint 2 只做 UI）
-  setTimeout(() => {
-    isStarting.value = false
+  try {
+    const { data } = await api.post('/streams', { title: streamTitle.value.trim() })
+    const stream = data.data
+
     showToast({
-      message: '開播功能開發中，敬請期待！',
-      type: 'text',
-      duration: 2000,
+      message: '直播間已建立！',
+      type: 'success',
+      duration: 1500,
     })
-  }, 1000)
+
+    // 導航到直播間
+    router.push(`/live/${stream.id}`)
+  } catch (err: any) {
+    const message = err?.response?.data?.message || '建立直播間失敗，請稍後再試'
+    showToast({ message, type: 'fail', duration: 2000 })
+  } finally {
+    isStarting.value = false
+  }
 }
 </script>
 
