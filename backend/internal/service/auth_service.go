@@ -2,8 +2,11 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -11,18 +14,25 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/streams-demo/backend/internal/model"
 	"github.com/streams-demo/backend/internal/repository"
-	"golang.org/x/crypto/bcrypt"
 )
 
 var (
-	ErrInvalidCredentials = errors.New("invalid email or password")
-	ErrInvalidToken       = errors.New("invalid or expired token")
-	ErrEmailExists        = errors.New("email already registered")
+	ErrInvalidCode      = errors.New("invalid or expired verification code")
+	ErrCodeExpired      = errors.New("verification code expired")
+	ErrCodeAlreadyUsed  = errors.New("verification code already used")
+	ErrPhoneNotFound    = errors.New("phone number not registered")
+	ErrPhoneExists      = errors.New("phone number already registered")
+	ErrInvalidToken     = errors.New("invalid or expired token")
+	ErrTooManyRequests  = errors.New("too many requests")
+	ErrOAuthFailed      = errors.New("oauth verification failed")
 )
 
 const (
 	accessTokenDuration  = 15 * time.Minute
 	refreshTokenDuration = 7 * 24 * time.Hour
+	codeExpiry           = 5 * time.Minute
+	codeCooldown         = 60 * time.Second
+	mockVerificationCode = "123456"
 )
 
 // AuthService 認證業務邏輯
@@ -41,50 +51,195 @@ func NewAuthService(userRepo *repository.UserRepository, rdb *redis.Client, jwtS
 	}
 }
 
-// Register 註冊新用戶
-func (s *AuthService) Register(ctx context.Context, req model.RegisterRequest) (*model.AuthResponse, error) {
-	// bcrypt 加密密碼
-	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+// SendCode 發送 SMS 驗證碼（MVP mock：固定 123456）
+func (s *AuthService) SendCode(ctx context.Context, phone string) (int, error) {
+	// 檢查 60 秒冷卻期
+	lastCreated, err := s.userRepo.GetLatestCodeCreatedAt(ctx, phone)
 	if err != nil {
-		return nil, fmt.Errorf("failed to hash password: %w", err)
+		return 0, fmt.Errorf("failed to check code cooldown: %w", err)
+	}
+	if !lastCreated.IsZero() {
+		elapsed := time.Since(lastCreated)
+		if elapsed < codeCooldown {
+			remaining := int(codeCooldown.Seconds() - elapsed.Seconds())
+			return remaining, ErrTooManyRequests
+		}
+	}
+
+	// 產生驗證碼（MVP 固定 123456）
+	code := mockVerificationCode
+	expiresAt := time.Now().Add(codeExpiry)
+
+	// 存入 DB
+	if err := s.userRepo.SaveVerificationCode(ctx, phone, code, expiresAt); err != nil {
+		return 0, fmt.Errorf("failed to save verification code: %w", err)
+	}
+
+	// Mock SMS：輸出到 console
+	log.Printf("[MOCK SMS] Phone: %s, Code: %s", phone, code)
+
+	return 0, nil
+}
+
+// Register 用手機號碼 + 驗證碼註冊
+func (s *AuthService) Register(ctx context.Context, req model.RegisterRequest) (*model.AuthResponse, error) {
+	// 驗證驗證碼
+	if err := s.verifyCode(ctx, req.Phone, req.Code); err != nil {
+		return nil, err
+	}
+
+	// 檢查手機號碼是否已存在
+	_, err := s.userRepo.GetUserByPhone(ctx, req.Phone)
+	if err == nil {
+		return nil, ErrPhoneExists
+	}
+	if !errors.Is(err, repository.ErrUserNotFound) {
+		return nil, fmt.Errorf("failed to check phone: %w", err)
 	}
 
 	// 建立用戶
-	user, err := s.userRepo.CreateUser(ctx, req.Email, string(hash), req.Nickname)
+	user, err := s.userRepo.CreateUserByPhone(ctx, req.Phone, req.Nickname)
 	if err != nil {
-		if errors.Is(err, repository.ErrEmailAlreadyExists) {
-			return nil, ErrEmailExists
+		if errors.Is(err, repository.ErrPhoneAlreadyExists) {
+			return nil, ErrPhoneExists
 		}
 		return nil, fmt.Errorf("failed to create user: %w", err)
 	}
 
-	// 產生 JWT tokens
+	// 標記驗證碼為已使用
+	_ = s.userRepo.MarkVerificationCodeUsed(ctx, req.Phone, req.Code)
+
 	return s.generateAuthResponse(ctx, user)
 }
 
-// Login 用戶登入
+// Login 用手機號碼 + 驗證碼登入
 func (s *AuthService) Login(ctx context.Context, req model.LoginRequest) (*model.AuthResponse, error) {
+	// 驗證驗證碼
+	if err := s.verifyCode(ctx, req.Phone, req.Code); err != nil {
+		return nil, err
+	}
+
 	// 查詢用戶
-	user, err := s.userRepo.GetUserByEmail(ctx, req.Email)
+	user, err := s.userRepo.GetUserByPhone(ctx, req.Phone)
 	if err != nil {
 		if errors.Is(err, repository.ErrUserNotFound) {
-			return nil, ErrInvalidCredentials
+			return nil, ErrPhoneNotFound
 		}
 		return nil, fmt.Errorf("failed to get user: %w", err)
 	}
 
-	// 驗證密碼
-	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
-		return nil, ErrInvalidCredentials
+	// 標記驗證碼為已使用
+	_ = s.userRepo.MarkVerificationCodeUsed(ctx, req.Phone, req.Code)
+
+	return s.generateAuthResponse(ctx, user)
+}
+
+// OAuthApple Apple OAuth 登入/自動註冊（MVP mock：不真正驗證 Apple token）
+func (s *AuthService) OAuthApple(ctx context.Context, req model.OAuthAppleRequest) (*model.OAuthResponse, bool, error) {
+	// MVP：從 id_token 產生一個穩定的 mock sub（用 hash 確保同一 token 產生同一 sub）
+	sub := "apple_" + hashString(req.IDToken)
+
+	// 查詢是否已綁定
+	user, err := s.userRepo.FindUserByOAuth(ctx, "apple", sub)
+	if err == nil {
+		// 已有帳號，直接登入
+		resp, err := s.generateAuthResponse(ctx, user)
+		if err != nil {
+			return nil, false, err
+		}
+		return &model.OAuthResponse{
+			AccessToken:  resp.AccessToken,
+			RefreshToken: resp.RefreshToken,
+			IsNewUser:    false,
+			User:         resp.User,
+		}, false, nil
+	}
+	if !errors.Is(err, repository.ErrOAuthNotFound) {
+		return nil, false, fmt.Errorf("failed to find oauth user: %w", err)
 	}
 
-	// 產生 JWT tokens
-	return s.generateAuthResponse(ctx, user)
+	// 新用戶：自動建立帳號
+	nickname := "Apple 用戶"
+	email := ""
+	if req.User != nil {
+		if req.User.Name != "" {
+			nickname = req.User.Name
+		}
+		email = req.User.Email
+	}
+
+	newUser, err := s.userRepo.CreateUserForOAuth(ctx, nickname, nil)
+	if err != nil {
+		return nil, false, fmt.Errorf("failed to create oauth user: %w", err)
+	}
+
+	// 建立 OAuth provider 記錄
+	if err := s.userRepo.CreateOAuthProvider(ctx, newUser.ID, "apple", sub, email, nickname); err != nil {
+		return nil, false, fmt.Errorf("failed to create oauth provider: %w", err)
+	}
+
+	resp, err := s.generateAuthResponse(ctx, newUser)
+	if err != nil {
+		return nil, false, err
+	}
+	return &model.OAuthResponse{
+		AccessToken:  resp.AccessToken,
+		RefreshToken: resp.RefreshToken,
+		IsNewUser:    true,
+		User:         resp.User,
+	}, true, nil
+}
+
+// OAuthGoogle Google OAuth 登入/自動註冊（MVP mock：不真正驗證 Google token）
+func (s *AuthService) OAuthGoogle(ctx context.Context, req model.OAuthGoogleRequest) (*model.OAuthResponse, bool, error) {
+	// MVP：從 credential 產生一個穩定的 mock sub
+	sub := "google_" + hashString(req.Credential)
+
+	// 查詢是否已綁定
+	user, err := s.userRepo.FindUserByOAuth(ctx, "google", sub)
+	if err == nil {
+		resp, err := s.generateAuthResponse(ctx, user)
+		if err != nil {
+			return nil, false, err
+		}
+		return &model.OAuthResponse{
+			AccessToken:  resp.AccessToken,
+			RefreshToken: resp.RefreshToken,
+			IsNewUser:    false,
+			User:         resp.User,
+		}, false, nil
+	}
+	if !errors.Is(err, repository.ErrOAuthNotFound) {
+		return nil, false, fmt.Errorf("failed to find oauth user: %w", err)
+	}
+
+	// 新用戶
+	nickname := "Google 用戶"
+	avatarURL := "https://fastly.jsdelivr.net/npm/@vant/assets/cat.jpeg"
+
+	newUser, err := s.userRepo.CreateUserForOAuth(ctx, nickname, &avatarURL)
+	if err != nil {
+		return nil, false, fmt.Errorf("failed to create oauth user: %w", err)
+	}
+
+	if err := s.userRepo.CreateOAuthProvider(ctx, newUser.ID, "google", sub, "", nickname); err != nil {
+		return nil, false, fmt.Errorf("failed to create oauth provider: %w", err)
+	}
+
+	resp, err := s.generateAuthResponse(ctx, newUser)
+	if err != nil {
+		return nil, false, err
+	}
+	return &model.OAuthResponse{
+		AccessToken:  resp.AccessToken,
+		RefreshToken: resp.RefreshToken,
+		IsNewUser:    true,
+		User:         resp.User,
+	}, true, nil
 }
 
 // RefreshToken 刷新 token
 func (s *AuthService) RefreshToken(ctx context.Context, refreshToken string) (*model.AuthResponse, error) {
-	// 從 Redis 驗證 refresh token
 	key := fmt.Sprintf("refresh_token:%s", refreshToken)
 	userIDStr, err := s.rdb.Get(ctx, key).Result()
 	if err != nil {
@@ -94,47 +249,38 @@ func (s *AuthService) RefreshToken(ctx context.Context, refreshToken string) (*m
 		return nil, fmt.Errorf("failed to check refresh token: %w", err)
 	}
 
-	// 同時驗證 JWT 簽名
 	claims, err := s.parseToken(refreshToken)
 	if err != nil {
 		return nil, ErrInvalidToken
 	}
 
-	// 確認 token type 是 refresh
 	tokenType, _ := claims["type"].(string)
 	if tokenType != "refresh" {
 		return nil, ErrInvalidToken
 	}
 
-	// 解析 user ID
 	userID, err := uuid.Parse(userIDStr)
 	if err != nil {
 		return nil, fmt.Errorf("invalid user id in token: %w", err)
 	}
 
-	// 查詢用戶
 	user, err := s.userRepo.GetUserByID(ctx, userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user: %w", err)
 	}
 
-	// 刪除舊的 refresh token
 	s.rdb.Del(ctx, key)
 
-	// 產生新的 token pair
 	return s.generateAuthResponse(ctx, user)
 }
 
 // Logout 登出（將 access token 加入黑名單）
 func (s *AuthService) Logout(ctx context.Context, accessToken string) error {
-	// 解析 token 取得剩餘有效期
 	claims, err := s.parseToken(accessToken)
 	if err != nil {
-		// token 已經無效，不需要加入黑名單
 		return nil
 	}
 
-	// 計算剩餘 TTL
 	exp, err := claims.GetExpirationTime()
 	if err != nil {
 		return nil
@@ -144,7 +290,6 @@ func (s *AuthService) Logout(ctx context.Context, accessToken string) error {
 		return nil
 	}
 
-	// 加入黑名單
 	key := fmt.Sprintf("blacklist:%s", accessToken)
 	if err := s.rdb.Set(ctx, key, "1", ttl).Err(); err != nil {
 		return fmt.Errorf("failed to blacklist token: %w", err)
@@ -201,23 +346,40 @@ func (s *AuthService) UpdateProfile(ctx context.Context, id uuid.UUID, req model
 	return s.userRepo.UpdateProfile(ctx, id, req.Nickname, req.AvatarURL, req.Bio)
 }
 
+// === 內部方法 ===
+
+// verifyCode 驗證 SMS 驗證碼
+func (s *AuthService) verifyCode(ctx context.Context, phone, code string) error {
+	storedCode, expiresAt, used, err := s.userRepo.GetLatestVerificationCode(ctx, phone)
+	if err != nil {
+		return ErrInvalidCode
+	}
+	if used {
+		return ErrCodeAlreadyUsed
+	}
+	if time.Now().After(expiresAt) {
+		return ErrCodeExpired
+	}
+	if storedCode != code {
+		return ErrInvalidCode
+	}
+	return nil
+}
+
 // generateAuthResponse 產生包含 access/refresh token 的回應
 func (s *AuthService) generateAuthResponse(ctx context.Context, user *model.User) (*model.AuthResponse, error) {
 	now := time.Now()
 
-	// 產生 access token
 	accessToken, err := s.createToken(user.ID.String(), "access", now, accessTokenDuration)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create access token: %w", err)
 	}
 
-	// 產生 refresh token
 	refreshToken, err := s.createToken(user.ID.String(), "refresh", now, refreshTokenDuration)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create refresh token: %w", err)
 	}
 
-	// 將 refresh token 存入 Redis
 	key := fmt.Sprintf("refresh_token:%s", refreshToken)
 	if err := s.rdb.Set(ctx, key, user.ID.String(), refreshTokenDuration).Err(); err != nil {
 		return nil, fmt.Errorf("failed to store refresh token: %w", err)
@@ -261,4 +423,10 @@ func (s *AuthService) parseToken(tokenString string) (jwt.MapClaims, error) {
 	}
 
 	return claims, nil
+}
+
+// hashString 用 SHA256 產生穩定的 hash（用於 OAuth mock sub）
+func hashString(s string) string {
+	h := sha256.Sum256([]byte(s))
+	return hex.EncodeToString(h[:8])
 }

@@ -82,10 +82,13 @@ func main() {
 	{
 		auth := v1.Group("/auth")
 		{
+			auth.POST("/send-code", authHandler.SendCode)
 			auth.POST("/register", authHandler.Register)
 			auth.POST("/login", authHandler.Login)
 			auth.POST("/refresh", authHandler.RefreshToken)
 			auth.POST("/logout", middleware.AuthMiddleware(authService), authHandler.Logout)
+			auth.POST("/oauth/apple", authHandler.OAuthApple)
+			auth.POST("/oauth/google", authHandler.OAuthGoogle)
 		}
 
 		users := v1.Group("/users")

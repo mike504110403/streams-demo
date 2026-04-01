@@ -19,6 +19,33 @@ func NewAuthHandler(authService *service.AuthService) *AuthHandler {
 	return &AuthHandler{authService: authService}
 }
 
+// SendCode POST /api/v1/auth/send-code
+func (h *AuthHandler) SendCode(c *gin.Context) {
+	var req model.SendCodeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	retryAfter, err := h.authService.SendCode(c.Request.Context(), req.Phone)
+	if err != nil {
+		if errors.Is(err, service.ErrTooManyRequests) {
+			c.JSON(http.StatusTooManyRequests, gin.H{
+				"error":       "請等待 60 秒後再試",
+				"retry_after": retryAfter,
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{
+		"message":    "驗證碼已發送",
+		"expires_in": 300,
+	}})
+}
+
 // Register POST /api/v1/auth/register
 func (h *AuthHandler) Register(c *gin.Context) {
 	var req model.RegisterRequest
@@ -29,11 +56,18 @@ func (h *AuthHandler) Register(c *gin.Context) {
 
 	resp, err := h.authService.Register(c.Request.Context(), req)
 	if err != nil {
-		if errors.Is(err, service.ErrEmailExists) {
-			c.JSON(http.StatusConflict, gin.H{"error": "email already registered"})
-			return
+		switch {
+		case errors.Is(err, service.ErrPhoneExists):
+			c.JSON(http.StatusConflict, gin.H{"message": "此手機號碼已被註冊"})
+		case errors.Is(err, service.ErrInvalidCode):
+			c.JSON(http.StatusBadRequest, gin.H{"message": "驗證碼錯誤，請重新輸入"})
+		case errors.Is(err, service.ErrCodeExpired):
+			c.JSON(http.StatusBadRequest, gin.H{"message": "驗證碼已過期，請重新發送"})
+		case errors.Is(err, service.ErrCodeAlreadyUsed):
+			c.JSON(http.StatusBadRequest, gin.H{"message": "驗證碼已使用，請重新發送"})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 		return
 	}
 
@@ -50,15 +84,72 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	resp, err := h.authService.Login(c.Request.Context(), req)
 	if err != nil {
-		if errors.Is(err, service.ErrInvalidCredentials) {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid email or password"})
+		switch {
+		case errors.Is(err, service.ErrPhoneNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"message": "此手機號碼尚未註冊"})
+		case errors.Is(err, service.ErrInvalidCode):
+			c.JSON(http.StatusBadRequest, gin.H{"message": "驗證碼錯誤，請重新輸入"})
+		case errors.Is(err, service.ErrCodeExpired):
+			c.JSON(http.StatusBadRequest, gin.H{"message": "驗證碼已過期，請重新發送"})
+		case errors.Is(err, service.ErrCodeAlreadyUsed):
+			c.JSON(http.StatusBadRequest, gin.H{"message": "驗證碼已使用，請重新發送"})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		}
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": resp})
+}
+
+// OAuthApple POST /api/v1/auth/oauth/apple
+func (h *AuthHandler) OAuthApple(c *gin.Context) {
+	var req model.OAuthAppleRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	resp, isNew, err := h.authService.OAuthApple(c.Request.Context(), req)
+	if err != nil {
+		if errors.Is(err, service.ErrOAuthFailed) {
+			c.JSON(http.StatusBadRequest, gin.H{"message": "Apple 登入失敗，請重試"})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": resp})
+	status := http.StatusOK
+	if isNew {
+		status = http.StatusCreated
+	}
+	c.JSON(status, gin.H{"data": resp})
+}
+
+// OAuthGoogle POST /api/v1/auth/oauth/google
+func (h *AuthHandler) OAuthGoogle(c *gin.Context) {
+	var req model.OAuthGoogleRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	resp, isNew, err := h.authService.OAuthGoogle(c.Request.Context(), req)
+	if err != nil {
+		if errors.Is(err, service.ErrOAuthFailed) {
+			c.JSON(http.StatusBadRequest, gin.H{"message": "Google 登入失敗，請重試"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		return
+	}
+
+	status := http.StatusOK
+	if isNew {
+		status = http.StatusCreated
+	}
+	c.JSON(status, gin.H{"data": resp})
 }
 
 // RefreshToken POST /api/v1/auth/refresh
