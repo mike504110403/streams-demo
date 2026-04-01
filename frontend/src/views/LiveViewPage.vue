@@ -18,9 +18,9 @@ onMounted(async () => {
   const id = route.params.id as string
   await streamStore.loadStreamById(id)
 
-  // 連線 Mock WebSocket，使用當前直播的觀看人數作為初始值
+  // 連線 WebSocket（Mock 或真實），使用當前直播的觀看人數作為初始值
   const initialCount = streamStore.currentStream?.viewer_count ?? 1234
-  chatStore.connect(initialCount)
+  chatStore.connect(id, initialCount)
 })
 
 onUnmounted(() => {

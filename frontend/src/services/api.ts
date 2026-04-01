@@ -6,7 +6,7 @@ const MOCK_MODE = import.meta.env.VITE_MOCK_API !== 'false'
 const DEBUG_MODE = import.meta.env.VITE_DEBUG_MODE !== 'false'
 
 const api: AxiosInstance = axios.create({
-  baseURL: 'http://localhost:8081/api/v1',
+  baseURL: import.meta.env.VITE_API_BASE || 'http://localhost:8081/api/v1',
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
@@ -102,8 +102,9 @@ api.interceptors.response.use(
     }
 
     try {
+      const apiBase = import.meta.env.VITE_API_BASE || 'http://localhost:8081/api/v1'
       const { data } = await axios.post(
-        'http://localhost:8081/api/v1/auth/refresh',
+        `${apiBase}/auth/refresh`,
         { refresh_token: refreshToken }
       )
 
