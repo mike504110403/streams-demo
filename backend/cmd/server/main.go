@@ -63,6 +63,12 @@ func main() {
 	streamHandler := handler.NewStreamHandler(streamService)
 	srsHandler := handler.NewSRSHandler(streamService)
 
+	// 圖片上傳
+	uploadHandler := handler.NewUploadHandler()
+	if err := handler.EnsureUploadsDir(); err != nil {
+		log.Fatalf("建立上傳目錄失敗: %v", err)
+	}
+
 	// WebSocket 彈幕
 	chatRepo := repository.NewChatRepository(dbPool)
 	wsHub := ws.NewHub()
@@ -82,6 +88,9 @@ func main() {
 		MaxAge:           12 * time.Hour,
 	}))
 
+	// 靜態檔案服務：/static/uploads/ → ./uploads/
+	r.Static("/static/uploads", handler.StaticUploadsPath())
+
 	// Health check
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
@@ -99,6 +108,13 @@ func main() {
 			auth.POST("/logout", middleware.AuthMiddleware(authService), authHandler.Logout)
 			auth.POST("/oauth/apple", authHandler.OAuthApple)
 			auth.POST("/oauth/google", authHandler.OAuthGoogle)
+		}
+
+		// 圖片上傳（需認證）
+		upload := v1.Group("/upload")
+		upload.Use(middleware.AuthMiddleware(authService))
+		{
+			upload.POST("/image", uploadHandler.UploadImage)
 		}
 
 		users := v1.Group("/users")
