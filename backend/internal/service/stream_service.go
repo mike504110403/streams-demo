@@ -13,6 +13,7 @@ import (
 	"github.com/streams-demo/backend/config"
 	"github.com/streams-demo/backend/internal/model"
 	"github.com/streams-demo/backend/internal/repository"
+	"github.com/streams-demo/backend/internal/ws"
 )
 
 var (
@@ -31,6 +32,7 @@ type StreamService struct {
 	repo *repository.StreamRepository
 	rdb  *redis.Client
 	cfg  *config.Config
+	hub  *ws.Hub
 }
 
 // NewStreamService 建立 StreamService
@@ -40,6 +42,11 @@ func NewStreamService(repo *repository.StreamRepository, rdb *redis.Client, cfg 
 		rdb:  rdb,
 		cfg:  cfg,
 	}
+}
+
+// SetHub 設定 WebSocket Hub（避免循環依賴，在初始化後設定）
+func (s *StreamService) SetHub(hub *ws.Hub) {
+	s.hub = hub
 }
 
 // CreateStream 建立直播間，產生 stream_key 並回傳含推流地址的 response
@@ -167,6 +174,9 @@ func (s *StreamService) EndStream(ctx context.Context, id uuid.UUID, userID uuid
 		return nil, fmt.Errorf("結束直播失敗: %w", err)
 	}
 
+	// 廣播「直播已結束」系統訊息到 WebSocket Room，然後關閉 Room
+	s.broadcastStreamEnded(id)
+
 	// 清除列表快取
 	_ = s.InvalidateListCache(ctx)
 
@@ -214,6 +224,9 @@ func (s *StreamService) HandleUnpublish(ctx context.Context, streamKey string) e
 
 	log.Printf("直播停止推流: stream_key=%s, stream_id=%s", streamKey, stream.ID)
 
+	// 廣播「直播已結束」系統訊息到 WebSocket Room，然後關閉 Room
+	s.broadcastStreamEnded(stream.ID)
+
 	// 清除列表快取
 	_ = s.InvalidateListCache(ctx)
 
@@ -232,6 +245,28 @@ func (s *StreamService) InvalidateListCache(ctx context.Context) error {
 		return fmt.Errorf("掃描快取 key 失敗: %w", err)
 	}
 	return nil
+}
+
+// broadcastStreamEnded 廣播「直播已結束」系統訊息並關閉 Room
+func (s *StreamService) broadcastStreamEnded(streamID uuid.UUID) {
+	if s.hub == nil {
+		return
+	}
+
+	room := s.hub.GetRoom(streamID)
+	if room == nil {
+		return
+	}
+
+	// 廣播「直播已結束」系統訊息（viewer_count 設為 0）
+	sysMsg := ws.NewSystemMessage("直播已結束", 0)
+	if data, err := json.Marshal(sysMsg); err == nil {
+		room.Broadcast(data)
+	}
+
+	// 關閉 Room，斷開所有客戶端
+	s.hub.RemoveRoom(streamID)
+	log.Printf("已廣播直播結束並關閉 Room: stream_id=%s", streamID)
 }
 
 // === 內部方法：組裝 response，使用 config 的 URL ===

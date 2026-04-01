@@ -72,6 +72,7 @@ func main() {
 	// WebSocket 彈幕
 	chatRepo := repository.NewChatRepository(dbPool)
 	wsHub := ws.NewHub()
+	streamService.SetHub(wsHub) // 設定 Hub，讓 EndStream 能廣播「直播已結束」
 	wsHandler := handler.NewWSHandler(wsHub, authService, chatRepo)
 	chatHandler := handler.NewChatHandler(chatRepo, wsHub)
 
