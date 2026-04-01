@@ -6,7 +6,18 @@ const router = createRouter({
     {
       path: '/',
       name: 'Home',
-      component: () => import('../views/HomePage.vue'),
+      component: () => import('../views/LiveHallPage.vue'),
+    },
+    {
+      path: '/live/:id',
+      name: 'LiveView',
+      component: () => import('../views/LiveViewPage.vue'),
+    },
+    {
+      path: '/go-live',
+      name: 'GoLive',
+      component: () => import('../views/GoLivePage.vue'),
+      meta: { requiresAuth: true },
     },
     {
       path: '/login',
