@@ -72,6 +72,24 @@ type UserResponse struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+// PublicUserResponse 公開用戶資訊（不含敏感欄位）
+type PublicUserResponse struct {
+	ID        uuid.UUID `json:"id"`
+	Nickname  string    `json:"nickname"`
+	AvatarURL *string   `json:"avatar_url"`
+	Bio       *string   `json:"bio"`
+}
+
+// ToPublicResponse 將 User 轉換為 PublicUserResponse
+func (u *User) ToPublicResponse() PublicUserResponse {
+	return PublicUserResponse{
+		ID:        u.ID,
+		Nickname:  u.Nickname,
+		AvatarURL: u.AvatarURL,
+		Bio:       u.Bio,
+	}
+}
+
 // AuthResponse 認證回應
 type AuthResponse struct {
 	AccessToken  string       `json:"access_token"`

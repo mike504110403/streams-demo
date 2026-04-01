@@ -38,6 +38,28 @@ func (h *UserHandler) GetMe(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": user.ToResponse()})
 }
 
+// GetUser GET /api/v1/users/:id (不需認證，公開用戶資訊)
+func (h *UserHandler) GetUser(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
+		return
+	}
+
+	user, err := h.authService.GetUserByID(c.Request.Context(), id)
+	if err != nil {
+		if errors.Is(err, repository.ErrUserNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": user.ToPublicResponse()})
+}
+
 // UpdateMe PUT /api/v1/users/me (需認證)
 func (h *UserHandler) UpdateMe(c *gin.Context) {
 	userID, _ := c.Get("user_id")

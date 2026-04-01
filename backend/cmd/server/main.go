@@ -117,6 +117,9 @@ func main() {
 			upload.POST("/image", uploadHandler.UploadImage)
 		}
 
+		// 公開用戶資訊（不需認證）
+		v1.GET("/users/:id", userHandler.GetUser)
+
 		users := v1.Group("/users")
 		users.Use(middleware.AuthMiddleware(authService))
 		{
