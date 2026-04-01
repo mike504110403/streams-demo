@@ -56,6 +56,8 @@ func main() {
 	authService := service.NewAuthService(userRepo, rdb, cfg.JWTSecret)
 	authHandler := handler.NewAuthHandler(authService)
 	userHandler := handler.NewUserHandler(authService)
+	streamHandler := handler.NewStreamHandler()
+	srsHandler := handler.NewSRSHandler()
 
 	// 設定 Gin
 	r := gin.Default()
@@ -91,6 +93,26 @@ func main() {
 		{
 			users.GET("/me", userHandler.GetMe)
 			users.PUT("/me", userHandler.UpdateMe)
+		}
+
+		// 直播間 API（需認證）
+		streams := v1.Group("/streams")
+		streams.Use(middleware.AuthMiddleware(authService))
+		{
+			streams.POST("", streamHandler.CreateStream)
+			streams.GET("", streamHandler.ListStreams)
+			streams.GET("/:id", streamHandler.GetStream)
+			streams.PUT("/:id", streamHandler.UpdateStream)
+			streams.DELETE("/:id", streamHandler.DeleteStream)
+		}
+
+		// SRS Callback（內部使用，不走 JWT）
+		srs := v1.Group("/internal/srs")
+		{
+			srs.POST("/on_publish", srsHandler.OnPublish)
+			srs.POST("/on_unpublish", srsHandler.OnUnpublish)
+			srs.POST("/on_play", srsHandler.OnPlay)
+			srs.POST("/on_stop", srsHandler.OnStop)
 		}
 	}
 
