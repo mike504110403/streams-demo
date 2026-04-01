@@ -5,22 +5,36 @@ import router from '../router'
 
 export interface User {
   id: string
-  email: string
+  phone: string
   nickname: string
   avatar_url: string
   bio: string
   created_at: string
 }
 
+export interface SendCodePayload {
+  phone: string
+}
+
 export interface LoginPayload {
-  email: string
-  password: string
+  phone: string
+  code: string
 }
 
 export interface RegisterPayload {
-  email: string
-  password: string
+  phone: string
+  code: string
   nickname: string
+}
+
+export interface AppleOAuthPayload {
+  code: string
+  id_token: string
+  user?: { name?: string; email?: string }
+}
+
+export interface GoogleOAuthPayload {
+  credential: string
 }
 
 export interface UpdateProfilePayload {
@@ -61,6 +75,11 @@ export const useAuthStore = defineStore('auth', () => {
 
   // === Actions ===
 
+  async function sendCode(payload: SendCodePayload) {
+    const { data } = await api.post('/auth/send-code', payload)
+    return data.data
+  }
+
   async function login(payload: LoginPayload) {
     const { data } = await api.post('/auth/login', payload)
     const result = data.data
@@ -85,6 +104,36 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.setItem('access_token', result.access_token)
     localStorage.setItem('refresh_token', result.refresh_token)
     localStorage.setItem('user', JSON.stringify(result.user))
+  }
+
+  async function oauthApple(payload: AppleOAuthPayload) {
+    const { data } = await api.post('/auth/oauth/apple', payload)
+    const result = data.data
+
+    accessToken.value = result.access_token
+    refreshTokenValue.value = result.refresh_token
+    user.value = result.user
+
+    localStorage.setItem('access_token', result.access_token)
+    localStorage.setItem('refresh_token', result.refresh_token)
+    localStorage.setItem('user', JSON.stringify(result.user))
+
+    return result
+  }
+
+  async function oauthGoogle(payload: GoogleOAuthPayload) {
+    const { data } = await api.post('/auth/oauth/google', payload)
+    const result = data.data
+
+    accessToken.value = result.access_token
+    refreshTokenValue.value = result.refresh_token
+    user.value = result.user
+
+    localStorage.setItem('access_token', result.access_token)
+    localStorage.setItem('refresh_token', result.refresh_token)
+    localStorage.setItem('user', JSON.stringify(result.user))
+
+    return result
   }
 
   async function logout() {
@@ -146,8 +195,11 @@ export const useAuthStore = defineStore('auth', () => {
     // Getters
     isAuthenticated,
     // Actions
+    sendCode,
     login,
     register,
+    oauthApple,
+    oauthGoogle,
     logout,
     refreshToken,
     fetchProfile,

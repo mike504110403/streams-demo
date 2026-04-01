@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { showToast, showLoadingToast, closeToast } from 'vant'
 import { useAuthStore } from '../stores/auth'
@@ -7,25 +7,73 @@ import { useAuthStore } from '../stores/auth'
 const router = useRouter()
 const authStore = useAuthStore()
 
+const step = ref(1)
+const phone = ref('')
+const code = ref('')
 const nickname = ref('')
-const email = ref('')
-const password = ref('')
-const confirmPassword = ref('')
 const loading = ref(false)
+const countdown = ref(0)
+let countdownTimer: ReturnType<typeof setInterval> | null = null
+
+const canSendCode = computed(() => {
+  return phone.value.length >= 10 && countdown.value === 0
+})
+
+function startCountdown() {
+  countdown.value = 60
+  countdownTimer = setInterval(() => {
+    countdown.value--
+    if (countdown.value <= 0) {
+      if (countdownTimer) clearInterval(countdownTimer)
+      countdownTimer = null
+    }
+  }, 1000)
+}
+
+onUnmounted(() => {
+  if (countdownTimer) clearInterval(countdownTimer)
+})
+
+async function handleSendCode() {
+  if (!phone.value) {
+    showToast('請輸入手機號碼')
+    return
+  }
+
+  const phoneRegex = /^09\d{8}$/
+  if (!phoneRegex.test(phone.value)) {
+    showToast('請輸入正確的手機號碼（09 開頭，10 碼）')
+    return
+  }
+
+  try {
+    const formatted = '+886' + phone.value.slice(1)
+    await authStore.sendCode({ phone: formatted })
+    startCountdown()
+    showToast({ message: '驗證碼已發送', type: 'success' })
+  } catch (error: unknown) {
+    const err = error as { response?: { data?: { error?: string } } }
+    showToast({ message: err.response?.data?.error || '發送失敗，請稍後再試', type: 'fail' })
+  }
+}
+
+function handleNextStep() {
+  if (!phone.value || !code.value) {
+    showToast('請填寫手機號碼和驗證碼')
+    return
+  }
+
+  if (code.value.length !== 6) {
+    showToast('請輸入 6 位數驗證碼')
+    return
+  }
+
+  step.value = 2
+}
 
 async function handleRegister() {
-  if (!nickname.value || !email.value || !password.value || !confirmPassword.value) {
-    showToast('請填寫所有欄位')
-    return
-  }
-
-  if (password.value !== confirmPassword.value) {
-    showToast({ message: '兩次密碼不一致', type: 'fail' })
-    return
-  }
-
-  if (password.value.length < 6) {
-    showToast({ message: '密碼至少需要 6 個字元', type: 'fail' })
+  if (!nickname.value) {
+    showToast('請輸入暱稱')
     return
   }
 
@@ -33,10 +81,11 @@ async function handleRegister() {
   showLoadingToast({ message: '註冊中...', forbidClick: true })
 
   try {
+    const formatted = '+886' + phone.value.slice(1)
     await authStore.register({
+      phone: formatted,
+      code: code.value,
       nickname: nickname.value,
-      email: email.value,
-      password: password.value,
     })
     closeToast()
     showToast({ message: '註冊成功', type: 'success' })
@@ -51,6 +100,10 @@ async function handleRegister() {
   }
 }
 
+function goBack() {
+  step.value = 1
+}
+
 function goLogin() {
   router.push('/login')
 }
@@ -63,44 +116,69 @@ function goLogin() {
       <p class="app-subtitle">建立你的帳號</p>
     </div>
 
-    <div class="register-form">
+    <!-- 步驟指示 -->
+    <div class="steps">
+      <div class="step" :class="{ active: step >= 1 }">1</div>
+      <div class="step-line" :class="{ active: step >= 2 }"></div>
+      <div class="step" :class="{ active: step >= 2 }">2</div>
+    </div>
+
+    <!-- 步驟一：手機號碼 + 驗證碼 -->
+    <div v-if="step === 1" class="register-form">
+      <van-field
+        v-model="phone"
+        type="tel"
+        placeholder="手機號碼（09 開頭）"
+        :border="false"
+        size="large"
+        left-icon="phone-o"
+        maxlength="10"
+      />
+
+      <div class="code-row">
+        <van-field
+          v-model="code"
+          type="digit"
+          placeholder="6 位數驗證碼"
+          :border="false"
+          size="large"
+          left-icon="shield-o"
+          maxlength="6"
+          class="code-input"
+        />
+        <van-button
+          size="small"
+          type="primary"
+          class="send-code-btn"
+          :disabled="!canSendCode"
+          @click="handleSendCode"
+        >
+          {{ countdown > 0 ? `${countdown}s` : '發送驗證碼' }}
+        </van-button>
+      </div>
+
+      <van-button
+        type="primary"
+        class="btn-primary"
+        @click="handleNextStep"
+      >
+        下一步
+      </van-button>
+
+      <div class="register-footer">
+        <span class="footer-text">已有帳號？</span>
+        <a class="footer-link" @click="goLogin">去登入</a>
+      </div>
+    </div>
+
+    <!-- 步驟二：暱稱 -->
+    <div v-if="step === 2" class="register-form">
       <van-field
         v-model="nickname"
-        placeholder="暱稱"
+        placeholder="取一個暱稱"
         :border="false"
         size="large"
         left-icon="user-o"
-        autocomplete="nickname"
-      />
-
-      <van-field
-        v-model="email"
-        type="email"
-        placeholder="Email"
-        :border="false"
-        size="large"
-        left-icon="envelop-o"
-        autocomplete="email"
-      />
-
-      <van-field
-        v-model="password"
-        type="password"
-        placeholder="密碼（至少 6 個字元）"
-        :border="false"
-        size="large"
-        left-icon="lock"
-        autocomplete="new-password"
-      />
-
-      <van-field
-        v-model="confirmPassword"
-        type="password"
-        placeholder="確認密碼"
-        :border="false"
-        size="large"
-        left-icon="lock"
-        autocomplete="new-password"
         @keyup.enter="handleRegister"
       />
 
@@ -111,12 +189,11 @@ function goLogin() {
         loading-text="註冊中..."
         @click="handleRegister"
       >
-        註冊
+        完成註冊
       </van-button>
 
       <div class="register-footer">
-        <span class="footer-text">已有帳號？</span>
-        <a class="footer-link" @click="goLogin">去登入</a>
+        <a class="footer-link" @click="goBack">← 上一步</a>
       </div>
     </div>
   </div>
@@ -134,7 +211,7 @@ function goLogin() {
 
 .register-header {
   text-align: center;
-  margin-bottom: 40px;
+  margin-bottom: 24px;
 }
 
 .app-title {
@@ -150,6 +227,44 @@ function goLogin() {
   color: var(--text-secondary);
 }
 
+.steps {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  margin-bottom: 32px;
+}
+
+.step {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 600;
+  background-color: var(--bg-secondary, #2a2a2a);
+  color: var(--text-secondary);
+  transition: all 0.3s;
+}
+
+.step.active {
+  background-color: var(--accent);
+  color: #fff;
+}
+
+.step-line {
+  width: 60px;
+  height: 2px;
+  background-color: var(--bg-secondary, #2a2a2a);
+  transition: all 0.3s;
+}
+
+.step-line.active {
+  background-color: var(--accent);
+}
+
 .register-form {
   display: flex;
   flex-direction: column;
@@ -157,6 +272,24 @@ function goLogin() {
 
 .register-form .van-field {
   margin-bottom: 16px;
+}
+
+.code-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.code-row .code-input {
+  flex: 1;
+}
+
+.send-code-btn {
+  flex-shrink: 0;
+  height: 40px;
+  padding: 0 16px;
+  font-size: 13px;
+  white-space: nowrap;
 }
 
 .register-form .btn-primary {

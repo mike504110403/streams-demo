@@ -1,5 +1,8 @@
 import axios from 'axios'
 import type { AxiosInstance, InternalAxiosRequestConfig, AxiosResponse } from 'axios'
+import { setupMockApi } from './mock'
+
+const MOCK_MODE = import.meta.env.VITE_MOCK_API !== 'false'
 
 const api: AxiosInstance = axios.create({
   baseURL: 'http://localhost:8081/api/v1',
@@ -8,6 +11,12 @@ const api: AxiosInstance = axios.create({
     'Content-Type': 'application/json',
   },
 })
+
+// Mock 模式啟用（預設開啟，直到後端就緒後設定 VITE_MOCK_API=false）
+if (MOCK_MODE) {
+  console.log('[API] Mock 模式已啟用 — 所有請求由前端模擬回應')
+  setupMockApi(api)
+}
 
 // 是否正在刷新 Token
 let isRefreshing = false

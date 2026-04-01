@@ -6,6 +6,9 @@ import { VantResolver } from '@vant/auto-import-resolver'
 
 // https://vite.dev/config/
 export default defineConfig({
+  server: {
+    allowedHosts: true,
+  },
   plugins: [
     vue(),
     AutoImport({

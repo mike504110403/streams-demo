@@ -87,14 +87,14 @@ function getAvatarUrl(): string {
           class="avatar"
         />
         <h2 class="nickname">{{ authStore.user?.nickname || '未設定暱稱' }}</h2>
-        <p class="email">{{ authStore.user?.email || '' }}</p>
+        <p class="phone">{{ authStore.user?.phone || '' }}</p>
       </div>
 
       <!-- 檢視模式 -->
       <div v-if="!isEditing" class="info-section">
         <van-cell-group :border="false" class="info-group">
           <van-cell title="暱稱" :value="authStore.user?.nickname || '未設定'" />
-          <van-cell title="Email" :value="authStore.user?.email || '未設定'" />
+          <van-cell title="手機號碼" :value="authStore.user?.phone || '未設定'" />
           <van-cell title="簡介" :value="authStore.user?.bio || '這個人很懶，什麼都沒寫'" />
         </van-cell-group>
 
@@ -192,7 +192,7 @@ function getAvatarUrl(): string {
   margin-bottom: 4px;
 }
 
-.email {
+.phone {
   font-size: 14px;
   color: var(--text-secondary);
 }
