@@ -197,6 +197,7 @@ function getStatusLabel(status: string): string {
 <style scoped>
 .live-hall-page {
   min-height: 100vh;
+  max-width: 100%;
   background-color: var(--bg-primary);
   display: flex;
   flex-direction: column;
@@ -233,11 +234,35 @@ function getStatusLabel(status: string): string {
   overflow-y: auto;
 }
 
-/* 直播卡片網格 - 兩列 */
+/* 直播卡片網格 - 響應式 */
 .stream-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 10px;
+}
+
+/* 平板：雙列 */
+@media (min-width: 768px) {
+  .stream-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+}
+
+/* 桌面：三列 */
+@media (min-width: 1024px) {
+  .stream-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+  }
+}
+
+/* 大桌面：四列 */
+@media (min-width: 1440px) {
+  .stream-grid {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+  }
 }
 
 .stream-card {
@@ -250,6 +275,37 @@ function getStatusLabel(status: string): string {
 
 .stream-card:active {
   transform: scale(0.97);
+}
+
+/* 手機單列時卡片改為橫向佈局 */
+@media (max-width: 767px) {
+  .stream-card {
+    display: flex;
+    flex-direction: row;
+  }
+
+  .card-cover {
+    width: 120px;
+    min-height: 120px;
+    aspect-ratio: auto;
+    flex-shrink: 0;
+  }
+
+  .card-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 10px 12px;
+  }
+
+  .card-title {
+    white-space: normal;
+    -webkit-line-clamp: 2;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
 }
 
 /* 封面區域 */
