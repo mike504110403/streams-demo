@@ -85,6 +85,11 @@ func (r *Room) Join(client *Client) {
 	r.join <- client
 }
 
+// Broadcast 將訊息發送到 Room 的廣播 channel
+func (r *Room) Broadcast(data []byte) {
+	r.broadcast <- data
+}
+
 // Close 關閉 Room
 func (r *Room) Close() {
 	select {
