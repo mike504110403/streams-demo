@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
@@ -26,11 +27,17 @@ const (
 	listCachePrefix = "streams:list:"
 )
 
+// ViewerCounter 觀看人數查詢介面（避免直接依賴 ws 套件）
+type ViewerCounter interface {
+	ViewerCount(streamID uuid.UUID) int
+}
+
 // StreamService 直播間業務邏輯
 type StreamService struct {
-	repo *repository.StreamRepository
-	rdb  *redis.Client
-	cfg  *config.Config
+	repo          *repository.StreamRepository
+	rdb           *redis.Client
+	cfg           *config.Config
+	viewerCounter ViewerCounter
 }
 
 // NewStreamService 建立 StreamService
@@ -40,6 +47,11 @@ func NewStreamService(repo *repository.StreamRepository, rdb *redis.Client, cfg 
 		rdb:  rdb,
 		cfg:  cfg,
 	}
+}
+
+// SetViewerCounter 設定觀看人數查詢器（在 Hub 初始化後注入，避免循環依賴）
+func (s *StreamService) SetViewerCounter(vc ViewerCounter) {
+	s.viewerCounter = vc
 }
 
 // CreateStream 建立直播間，產生 stream_key 並回傳含推流地址的 response
@@ -79,11 +91,21 @@ func (s *StreamService) ListStreams(ctx context.Context, page, limit int) (*mode
 		return nil, fmt.Errorf("查詢直播列表失敗: %w", err)
 	}
 
-	// 組裝 response（觀眾視角，含拉流地址）
+	// 組裝 response（觀眾視角，含拉流地址），並從 Hub 即時取得 viewer_count
 	streamResponses := make([]model.StreamResponse, 0, len(streams))
 	for _, stream := range streams {
-		streamResponses = append(streamResponses, s.toPlayerResponse(stream))
+		sr := s.toPlayerResponse(stream)
+		// 如果有 ViewerCounter（Hub），用即時人數覆蓋 DB 的冗餘欄位
+		if s.viewerCounter != nil {
+			sr.ViewerCount = s.viewerCounter.ViewerCount(stream.ID)
+		}
+		streamResponses = append(streamResponses, sr)
 	}
+
+	// 依 viewer_count 降序重排（因為 DB 的 viewer_count 可能不即時）
+	sort.Slice(streamResponses, func(i, j int) bool {
+		return streamResponses[i].ViewerCount > streamResponses[j].ViewerCount
+	})
 
 	resp := &model.ListStreamsResponse{
 		Streams: streamResponses,
@@ -113,6 +135,10 @@ func (s *StreamService) GetStream(ctx context.Context, id uuid.UUID) (*model.Str
 	}
 
 	resp := s.toPlayerResponse(stream)
+	// 如果有 ViewerCounter（Hub），用即時人數覆蓋 DB 的冗餘欄位
+	if s.viewerCounter != nil {
+		resp.ViewerCount = s.viewerCounter.ViewerCount(stream.ID)
+	}
 	return &resp, nil
 }
 

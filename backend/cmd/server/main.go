@@ -66,6 +66,7 @@ func main() {
 	// WebSocket 彈幕
 	chatRepo := repository.NewChatRepository(dbPool)
 	wsHub := ws.NewHub()
+	streamService.SetViewerCounter(wsHub) // 注入即時觀看人數查詢
 	wsHandler := handler.NewWSHandler(wsHub, authService, chatRepo)
 	chatHandler := handler.NewChatHandler(chatRepo, wsHub)
 
