@@ -1,20 +1,46 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { showDialog } from 'vant'
+import { useAuthStore } from '../../stores/auth'
 
 const emit = defineEmits<{
   (e: 'send', content: string): void
 }>()
+
+const router = useRouter()
+const authStore = useAuthStore()
 
 const inputValue = ref('')
 const showInput = ref(false)
 const inputRef = ref<HTMLInputElement | null>(null)
 
 function openInput() {
+  // 未登入時彈出登入提示
+  if (!authStore.isAuthenticated) {
+    showLoginPrompt()
+    return
+  }
   showInput.value = true
   // 等 DOM 更新後 focus
   setTimeout(() => {
     inputRef.value?.focus()
   }, 100)
+}
+
+function showLoginPrompt() {
+  showDialog({
+    title: '尚未登入',
+    message: '登入後才能發送彈幕，要前往登入嗎？',
+    confirmButtonText: '前往登入',
+    cancelButtonText: '稍後再說',
+    showCancelButton: true,
+    confirmButtonColor: '#fe2c55',
+  }).then(() => {
+    router.push('/login?redirect=' + encodeURIComponent(window.location.pathname))
+  }).catch(() => {
+    // 取消
+  })
 }
 
 function handleSend() {

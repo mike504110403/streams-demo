@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { showDialog } from 'vant'
 import { useAuthStore } from '../stores/auth'
 import { useStreamStore } from '../stores/stream'
 
@@ -26,11 +27,26 @@ function goToStream(id: string) {
   router.push(`/live/${id}`)
 }
 
+function showLoginPrompt(redirectPath: string) {
+  showDialog({
+    title: '尚未登入',
+    message: '登入後才能使用此功能，要前往登入嗎？',
+    confirmButtonText: '前往登入',
+    cancelButtonText: '稍後再說',
+    showCancelButton: true,
+    confirmButtonColor: '#fe2c55',
+  }).then(() => {
+    router.push('/login?redirect=' + encodeURIComponent(redirectPath))
+  }).catch(() => {
+    // 取消
+  })
+}
+
 function goToLive() {
   if (authStore.isAuthenticated) {
     router.push('/go-live')
   } else {
-    router.push('/login?redirect=/go-live')
+    showLoginPrompt('/go-live')
   }
 }
 
@@ -41,7 +57,7 @@ function onTabChange(index: number) {
     if (authStore.isAuthenticated) {
       router.push('/profile')
     } else {
-      router.push('/login')
+      showLoginPrompt('/profile')
     }
   }
 }
@@ -97,11 +113,26 @@ function getStatusLabel(status: string): string {
           @load="onLoadMore"
         >
           <!-- 空狀態 -->
-          <van-empty
+          <div
             v-if="!streamStore.loading && streamStore.streams.length === 0"
-            description="目前沒有直播，稍後再來看看"
-            image="search"
-          />
+            class="empty-state"
+          >
+            <div class="empty-icon">
+              <van-icon name="video-o" size="64" color="#444" />
+            </div>
+            <p class="empty-title">目前沒有直播</p>
+            <p class="empty-subtitle">稍後再來看看，或自己開一場吧！</p>
+            <van-button
+              round
+              plain
+              size="small"
+              color="#888"
+              class="empty-refresh-btn"
+              @click="onRefresh"
+            >
+              重新整理
+            </van-button>
+          </div>
 
           <!-- 直播卡片網格 -->
           <div v-else class="stream-grid">
@@ -113,7 +144,9 @@ function getStatusLabel(status: string): string {
             >
               <!-- 封面圖 -->
               <div class="card-cover">
+                <!-- 有封面 URL 時顯示圖片 -->
                 <van-image
+                  v-if="stream.cover_url"
                   :src="stream.cover_url"
                   fit="cover"
                   width="100%"
@@ -126,11 +159,17 @@ function getStatusLabel(status: string): string {
                     </div>
                   </template>
                   <template #error>
-                    <div class="cover-placeholder">
-                      <van-icon name="video-o" size="32" color="#666" />
+                    <div class="cover-fallback">
+                      <van-icon name="video-o" size="36" color="rgba(255,255,255,0.5)" />
+                      <span class="fallback-title">{{ stream.title }}</span>
                     </div>
                   </template>
                 </van-image>
+                <!-- 沒有封面 URL 時顯示漸層背景 + 標題 -->
+                <div v-else class="cover-fallback">
+                  <van-icon name="video-o" size="36" color="rgba(255,255,255,0.5)" />
+                  <span class="fallback-title">{{ stream.title }}</span>
+                </div>
 
                 <!-- 狀態標籤 -->
                 <span
@@ -172,8 +211,8 @@ function getStatusLabel(status: string): string {
       </van-pull-refresh>
     </div>
 
-    <!-- 右下角浮動開播按鈕（登入用戶才看得到） -->
-    <div v-if="authStore.isAuthenticated" class="fab-go-live" @click="goToLive">
+    <!-- 右下角浮動開播按鈕 -->
+    <div class="fab-go-live" @click="goToLive">
       <van-icon name="plus" size="28" color="#fff" />
     </div>
 
@@ -189,6 +228,7 @@ function getStatusLabel(status: string): string {
 <style scoped>
 .live-hall-page {
   min-height: 100vh;
+  max-width: 100%;
   background-color: var(--bg-primary);
   display: flex;
   flex-direction: column;
@@ -225,11 +265,35 @@ function getStatusLabel(status: string): string {
   overflow-y: auto;
 }
 
-/* 直播卡片網格 - 兩列 */
+/* 直播卡片網格 - 響應式 */
 .stream-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 10px;
+}
+
+/* 平板：雙列 */
+@media (min-width: 768px) {
+  .stream-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+}
+
+/* 桌面：三列 */
+@media (min-width: 1024px) {
+  .stream-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+  }
+}
+
+/* 大桌面：四列 */
+@media (min-width: 1440px) {
+  .stream-grid {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+  }
 }
 
 .stream-card {
@@ -242,6 +306,37 @@ function getStatusLabel(status: string): string {
 
 .stream-card:active {
   transform: scale(0.97);
+}
+
+/* 手機單列時卡片改為橫向佈局 */
+@media (max-width: 767px) {
+  .stream-card {
+    display: flex;
+    flex-direction: row;
+  }
+
+  .card-cover {
+    width: 120px;
+    min-height: 120px;
+    aspect-ratio: auto;
+    flex-shrink: 0;
+  }
+
+  .card-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 10px 12px;
+  }
+
+  .card-title {
+    white-space: normal;
+    -webkit-line-clamp: 2;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
 }
 
 /* 封面區域 */
@@ -267,6 +362,31 @@ function getStatusLabel(status: string): string {
   align-items: center;
   justify-content: center;
   background-color: var(--bg-card);
+}
+
+/* 無封面時的漸層背景 */
+.cover-fallback {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: linear-gradient(135deg, #2a2a3e 0%, #1a1a2e 40%, #16213e 100%);
+  padding: 12px;
+}
+
+.fallback-title {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+  text-align: center;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
 }
 
 /* 狀態標籤 */
@@ -369,12 +489,35 @@ function getStatusLabel(status: string): string {
   min-height: calc(100vh - 130px);
 }
 
-:deep(.van-empty) {
-  padding-top: 80px;
+/* 自訂空狀態 */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 80px 32px 40px;
+  text-align: center;
 }
 
-:deep(.van-empty__description) {
+.empty-icon {
+  margin-bottom: 20px;
+  opacity: 0.6;
+}
+
+.empty-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.empty-subtitle {
+  font-size: 14px;
   color: var(--text-muted);
+  margin-bottom: 24px;
+}
+
+.empty-refresh-btn {
+  min-width: 100px;
 }
 
 :deep(.van-list__finished-text) {
