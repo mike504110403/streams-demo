@@ -26,6 +26,7 @@ type Client struct {
 	nickname  string
 	send      chan []byte
 	onMessage MessagePersister
+	readOnly  bool // 未登入用戶為唯讀模式，只能接收彈幕不能發送
 }
 
 // NewClient 建立 Client
@@ -37,6 +38,19 @@ func NewClient(conn *websocket.Conn, room *Room, userID uuid.UUID, nickname stri
 		nickname:  nickname,
 		send:      make(chan []byte, 64),
 		onMessage: onMessage,
+		readOnly:  false,
+	}
+}
+
+// NewReadOnlyClient 建立唯讀 Client（未登入用戶，只能接收彈幕不能發送）
+func NewReadOnlyClient(conn *websocket.Conn, room *Room) *Client {
+	return &Client{
+		conn:     conn,
+		room:     room,
+		userID:   uuid.Nil,
+		nickname: "訪客",
+		send:     make(chan []byte, 64),
+		readOnly: true,
 	}
 }
 
@@ -54,6 +68,12 @@ func (c *Client) ReadPump(ctx context.Context) {
 			// 正常關閉或錯誤都走這裡
 			log.Printf("[WS] 讀取結束 user=%s: %v", c.userID, err)
 			return
+		}
+
+		// 唯讀用戶不能發送彈幕，忽略訊息
+		if c.readOnly {
+			log.Printf("[WS] 唯讀用戶嘗試發送訊息，已忽略")
+			continue
 		}
 
 		var msg IncomingMessage
