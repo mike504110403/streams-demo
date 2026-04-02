@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { showDialog } from 'vant'
 import { useAuthStore } from '../stores/auth'
 import { useStreamStore } from '../stores/stream'
 
@@ -26,11 +27,26 @@ function goToStream(id: string) {
   router.push(`/live/${id}`)
 }
 
+function showLoginPrompt(redirectPath: string) {
+  showDialog({
+    title: '尚未登入',
+    message: '登入後才能使用此功能，要前往登入嗎？',
+    confirmButtonText: '前往登入',
+    cancelButtonText: '稍後再說',
+    showCancelButton: true,
+    confirmButtonColor: '#fe2c55',
+  }).then(() => {
+    router.push('/login?redirect=' + encodeURIComponent(redirectPath))
+  }).catch(() => {
+    // 取消
+  })
+}
+
 function goToLive() {
   if (authStore.isAuthenticated) {
     router.push('/go-live')
   } else {
-    router.push('/login?redirect=/go-live')
+    showLoginPrompt('/go-live')
   }
 }
 
@@ -41,7 +57,7 @@ function onTabChange(index: number) {
     if (authStore.isAuthenticated) {
       router.push('/profile')
     } else {
-      router.push('/login')
+      showLoginPrompt('/profile')
     }
   }
 }
@@ -195,8 +211,8 @@ function getStatusLabel(status: string): string {
       </van-pull-refresh>
     </div>
 
-    <!-- 右下角浮動開播按鈕（登入用戶才看得到） -->
-    <div v-if="authStore.isAuthenticated" class="fab-go-live" @click="goToLive">
+    <!-- 右下角浮動開播按鈕 -->
+    <div class="fab-go-live" @click="goToLive">
       <van-icon name="plus" size="28" color="#fff" />
     </div>
 
