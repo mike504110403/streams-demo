@@ -97,11 +97,26 @@ function getStatusLabel(status: string): string {
           @load="onLoadMore"
         >
           <!-- 空狀態 -->
-          <van-empty
+          <div
             v-if="!streamStore.loading && streamStore.streams.length === 0"
-            description="目前沒有直播，稍後再來看看"
-            image="search"
-          />
+            class="empty-state"
+          >
+            <div class="empty-icon">
+              <van-icon name="video-o" size="64" color="#444" />
+            </div>
+            <p class="empty-title">目前沒有直播</p>
+            <p class="empty-subtitle">稍後再來看看，或自己開一場吧！</p>
+            <van-button
+              round
+              plain
+              size="small"
+              color="#888"
+              class="empty-refresh-btn"
+              @click="onRefresh"
+            >
+              重新整理
+            </van-button>
+          </div>
 
           <!-- 直播卡片網格 -->
           <div v-else class="stream-grid">
@@ -458,12 +473,35 @@ function getStatusLabel(status: string): string {
   min-height: calc(100vh - 130px);
 }
 
-:deep(.van-empty) {
-  padding-top: 80px;
+/* 自訂空狀態 */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 80px 32px 40px;
+  text-align: center;
 }
 
-:deep(.van-empty__description) {
+.empty-icon {
+  margin-bottom: 20px;
+  opacity: 0.6;
+}
+
+.empty-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.empty-subtitle {
+  font-size: 14px;
   color: var(--text-muted);
+  margin-bottom: 24px;
+}
+
+.empty-refresh-btn {
+  min-width: 100px;
 }
 
 :deep(.van-list__finished-text) {

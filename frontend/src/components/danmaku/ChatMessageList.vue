@@ -19,6 +19,10 @@ watch(() => props.messages.length, async () => {
 
 <template>
   <div class="chat-message-list" ref="listRef">
+    <!-- 空狀態 -->
+    <div v-if="messages.length === 0" class="chat-empty">
+      <span class="chat-empty-text">暫時沒有訊息，來說點什麼吧</span>
+    </div>
     <div
       v-for="msg in messages.slice(-50)"
       :key="msg.id"
@@ -83,5 +87,16 @@ watch(() => props.messages.length, async () => {
 
 .msg-content {
   color: #fff;
+}
+
+/* 空狀態 */
+.chat-empty {
+  padding: 16px 0;
+  text-align: center;
+}
+
+.chat-empty-text {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.3);
 }
 </style>
