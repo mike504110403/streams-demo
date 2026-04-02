@@ -109,22 +109,22 @@ func main() {
 			users.PUT("/me", userHandler.UpdateMe)
 		}
 
-		// 直播間 API（需認證）
+		// 直播間 API — 公開路由（不需登入即可瀏覽和觀看）
 		streams := v1.Group("/streams")
-		streams.Use(middleware.AuthMiddleware(authService))
 		{
-			streams.POST("", streamHandler.CreateStream)
 			streams.GET("", streamHandler.ListStreams)
 			streams.GET("/:id", streamHandler.GetStream)
-			streams.PUT("/:id", streamHandler.UpdateStream)
-			streams.DELETE("/:id", streamHandler.DeleteStream)
+			streams.GET("/:id/viewers", chatHandler.GetViewers)
 			streams.GET("/:id/messages", chatHandler.GetMessages)
 		}
 
-		// 直播間公開 API（不需認證）
-		publicStreams := v1.Group("/streams")
+		// 直播間 API — 需認證路由（開播、更新、結束）
+		streamsAuth := v1.Group("/streams")
+		streamsAuth.Use(middleware.AuthMiddleware(authService))
 		{
-			publicStreams.GET("/:id/viewers", chatHandler.GetViewers)
+			streamsAuth.POST("", streamHandler.CreateStream)
+			streamsAuth.PUT("/:id", streamHandler.UpdateStream)
+			streamsAuth.DELETE("/:id", streamHandler.DeleteStream)
 		}
 
 		// WebSocket 彈幕（token 在 query param 驗證）
