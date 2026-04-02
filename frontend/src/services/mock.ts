@@ -284,6 +284,60 @@ const handlers: Array<{ method: string; pattern: RegExp; handler: Handler }> = [
       return mockResponse(200, { data: user })
     },
   },
+  // POST /upload/image — 圖片上傳（Mock）
+  {
+    method: 'post',
+    pattern: /\/upload\/image$/,
+    handler: async () => {
+      await delay(MOCK_DELAY)
+      // Mock：回傳一個假的 URL，實際不存檔
+      const uuid = generateId()
+      const url = `/static/uploads/avatars/${uuid}.jpg`
+      return mockResponse(200, { data: { url } })
+    },
+  },
+  // GET /users/:id — 公開用戶資訊
+  {
+    method: 'get',
+    pattern: /\/users\/(?!me$)([^/?]+)$/,
+    handler: async (config) => {
+      await delay(300)
+      const url = config.url || ''
+      const match = url.match(/\/users\/([^/?]+)$/)
+      const id = match ? match[1] : ''
+
+      // 先查 mockDB
+      const user = mockDB.users.get(id)
+      if (user) {
+        return mockResponse(200, {
+          data: {
+            id: user.id,
+            nickname: user.nickname,
+            avatar_url: user.avatar_url,
+            bio: user.bio,
+          },
+        })
+      }
+
+      // 查 localStorage（自己）
+      const storedUser = localStorage.getItem('user')
+      if (storedUser) {
+        const self = JSON.parse(storedUser)
+        if (self.id === id) {
+          return mockResponse(200, {
+            data: {
+              id: self.id,
+              nickname: self.nickname,
+              avatar_url: self.avatar_url,
+              bio: self.bio,
+            },
+          })
+        }
+      }
+
+      throw { response: mockResponse(404, { error: 'user not found' }) }
+    },
+  },
   // ========== 直播相關 ==========
   // GET /streams — 直播列表
   {
