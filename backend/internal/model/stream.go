@@ -47,7 +47,7 @@ type StreamResponse struct {
 	ID          uuid.UUID    `json:"id"`
 	UserID      uuid.UUID    `json:"user_id"`
 	Title       string       `json:"title"`
-	CoverURL    *string      `json:"cover_url,omitempty"`
+	CoverURL    *string      `json:"cover_url"`
 	StreamKey   string       `json:"stream_key,omitempty"`
 	Status      StreamStatus `json:"status"`
 	StartedAt   *time.Time   `json:"started_at,omitempty"`
