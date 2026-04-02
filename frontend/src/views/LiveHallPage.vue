@@ -113,7 +113,9 @@ function getStatusLabel(status: string): string {
             >
               <!-- 封面圖 -->
               <div class="card-cover">
+                <!-- 有封面 URL 時顯示圖片 -->
                 <van-image
+                  v-if="stream.cover_url"
                   :src="stream.cover_url"
                   fit="cover"
                   width="100%"
@@ -126,11 +128,17 @@ function getStatusLabel(status: string): string {
                     </div>
                   </template>
                   <template #error>
-                    <div class="cover-placeholder">
-                      <van-icon name="video-o" size="32" color="#666" />
+                    <div class="cover-fallback">
+                      <van-icon name="video-o" size="36" color="rgba(255,255,255,0.5)" />
+                      <span class="fallback-title">{{ stream.title }}</span>
                     </div>
                   </template>
                 </van-image>
+                <!-- 沒有封面 URL 時顯示漸層背景 + 標題 -->
+                <div v-else class="cover-fallback">
+                  <van-icon name="video-o" size="36" color="rgba(255,255,255,0.5)" />
+                  <span class="fallback-title">{{ stream.title }}</span>
+                </div>
 
                 <!-- 狀態標籤 -->
                 <span
@@ -267,6 +275,31 @@ function getStatusLabel(status: string): string {
   align-items: center;
   justify-content: center;
   background-color: var(--bg-card);
+}
+
+/* 無封面時的漸層背景 */
+.cover-fallback {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: linear-gradient(135deg, #2a2a3e 0%, #1a1a2e 40%, #16213e 100%);
+  padding: 12px;
+}
+
+.fallback-title {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+  text-align: center;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
 }
 
 /* 狀態標籤 */
